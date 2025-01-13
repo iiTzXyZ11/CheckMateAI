@@ -7,8 +7,7 @@ import platform
 if platform.system() == "Windows":
     import win32api  # or other pywin32 modules
 
-if os.getenv("HEROKU", "false").lower() != "true":
-    import win32api  # Import only when not on Heroku
+
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)  # Generate a random secret key

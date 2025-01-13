@@ -1,14 +1,12 @@
 import os  # Standard library
 import re
-from flask import Flask, render_template, redirect, url_for, request, session
-from g4f.client import Client  # GPT-based client
-from g4f.Provider import GeminiPro
 import platform
 if platform.system() == "Windows":
     import win32api  # or other pywin32 modules
 
-if os.getenv("HEROKU", "false").lower() != "true":
-    import win32api  # Import only when not on Heroku
+from flask import Flask, render_template, redirect, url_for, request, session
+from g4f.client import Client  # GPT-based client
+from g4f.Provider import GeminiPro
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)  # Generate a random secret key
