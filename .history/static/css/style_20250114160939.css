@@ -349,9 +349,8 @@ body {
   display:none;
 }
 
-.stuff{
-  display: flex;
-  flex-direction: column;
+.stuff a{
+  justify-self: center;
 }
 
 @media only screen and (min-width: 720px){

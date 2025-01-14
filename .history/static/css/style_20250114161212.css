@@ -349,11 +349,6 @@ body {
   display:none;
 }
 
-.stuff{
-  display: flex;
-  flex-direction: column;
-}
-
 @media only screen and (min-width: 720px){
   #mobile{
     display:none;
