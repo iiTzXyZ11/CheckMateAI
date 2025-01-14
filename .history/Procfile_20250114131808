@@ -1,6 +1,6 @@
-
+<<<<<<< HEAD
 web: gunicorn app:app
 release: pip install --upgrade pip  
-
+=======
 web: gunicorn app:app
-
+>>>>>>> 6c57c0dd841c6ec679791106a041413f4bee1bea
