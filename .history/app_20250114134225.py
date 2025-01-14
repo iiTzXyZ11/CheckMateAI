@@ -9,7 +9,7 @@ app.secret_key = os.urandom(24)  # Generate a random secret key
 
 # Initialize the GPT client for text generation and grading
 client = Client()
-image_to_text_client = Client(api_key="AIzaSyCX13POLxDWzFWzOfZr7rn3vjG0eNUXlfk", provider=GeminiPro)
+image_to_text_client = Client(api_key="AIzaSyDKnjQPE-x6cJGDbsjX3lBGa5V3tp0WArQ", provider=GeminiPro)
 
 # Function to convert image to text
 def image_to_text(image_file):

@@ -2,14 +2,14 @@ import os  # Standard library
 import re
 from flask import Flask, render_template, redirect, url_for, request, session
 from g4f.client import Client  # GPT-based client
-from g4f.Provider import GeminiPro
+from g4f.Provider.GeminiPro import GeminiPro
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)  # Generate a random secret key
 
 # Initialize the GPT client for text generation and grading
 client = Client()
-image_to_text_client = Client(api_key="AIzaSyCX13POLxDWzFWzOfZr7rn3vjG0eNUXlfk", provider=GeminiPro)
+image_to_text_client = Client(api_key="AIzaSyDKnjQPE-x6cJGDbsjX3lBGa5V3tp0WArQ", provider=GeminiPro)
 
 # Function to convert image to text
 def image_to_text(image_file):
@@ -154,36 +154,38 @@ def front_page():
     print("Front page accessed")  # Debug print
     return render_template('front_page.html')
 
-@app.route('/scan', methods=['GET', 'POST'])  # Define the scanning route
+@app.route('/scan', methods=['GET', 'POST'])
 def index():
+    file_name = None  # Default file name is None
+    error = None  # Default error is None
+
     if request.method == 'POST':
-        context = request.form['context']  # Get context text from the form
-        session['context_text'] = context  # Store the context text in the session
+        context = request.form.get('context', '').strip()
+        essay = request.form.get('essay', '').strip()
+        image = request.files.get('image')
 
-        # Check for image upload
-        image = request.files.get('image')  # Get the uploaded image
-        if image:  # If an image was uploaded
-            essay = image_to_text(image)  # Convert the image to text
-            if "Error" in essay:  # Check if there was an error during processing
-                return render_template('index.html', error=essay)
-        else:
-            essay = request.form['essay']  # If no image, get the text from the textarea
+        if image and image.filename != '':
+            file_name = image.filename  # Get the file name
+            essay = image_to_text(image)  # Process the uploaded image to extract text
 
-        # Store the original text in the session
-        session['original_text'] = essay  
+        if not essay:
+            error = "Please provide text or upload an image to extract text."
 
-        # Check if the essay has at least 150 words
+        if not context:
+            error = "Please provide context for grading."
+
         if len(essay.split()) < 150:
-            return render_template('index.html', essay=essay,
-                                    error="Error: Ang input na teksto ay dapat magkaroon ng hindi bababa sa 150 salita.")
+            error = "Error: Ang input na teksto ay dapat magkaroon ng hindi bababa sa 150 salita."
 
-        if not context.strip():  # Check if context is empty or just whitespace
-            return render_template('index.html', essay=essay,
-                                    error="Error: Please provide context for grading.")
+        if error:
+            return render_template('index.html', error=error, file_name=file_name, essay=essay, context=context)
 
-        return redirect(url_for('set_criteria'))  # Redirect to set_criteria
+        session['original_text'] = essay
+        session['context_text'] = context
+        return redirect(url_for('set_criteria'))
 
-    return render_template('index.html')  # Render the scanning page
+    return render_template('index.html', file_name=file_name)
+
 
 @app.route('/process_essay', methods=['GET', 'POST'])  # Define the route for processing the essay
 def process_essay():
