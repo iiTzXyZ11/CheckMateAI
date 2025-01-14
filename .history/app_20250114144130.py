@@ -11,25 +11,23 @@ app.secret_key = os.urandom(24)  # Generate a random secret key
 client = Client()
 image_to_text_client = Client(api_key="AIzaSyCX13POLxDWzFWzOfZr7rn3vjG0eNUXlfk", provider=GeminiPro)
 
-# Helper function for preprocessing input
-def preprocess_input(input_text):
-    """Normalize input by stripping extra spaces and newlines."""
-    return re.sub(r'\s+', ' ', input_text.strip())
-
 # Function to convert image to text
 def image_to_text(image_file):
     try:
         print(f"Received the image: {image_file.filename}")
+        
         response = image_to_text_client.chat.completions.create(
             model="gemini-1.5-pro-latest",
             messages=[{"role": "user", "content": "extract the text from this image"}],
             image=image_file
         )
-        if hasattr(response, 'choices') and len(response.choices) > 0:  # type: ignore
-            content = response.choices[0].message.content  # type: ignore
+        
+        if hasattr(response, 'choices') and len(response.choices) > 0: # type: ignore
+            content = response.choices[0].message.content # type: ignore
             print(f"Extracted content: {content}")
             return content.strip() if content else "No text could be extracted."
         return "No text could be extracted."
+    
     except Exception as e:
         print(f"Error during image processing: {e}")
         return f"An error occurred during image processing: {str(e)}"
@@ -59,10 +57,11 @@ def generate_summary(text):
 
 # Grade essay function
 def grade_essay(essay_text, context_text):
-    # Check essay length early
+    # Check essay length once, early return if too short
     if len(essay_text.split()) < 110:
         return "Error: Ang input na teksto ay dapat magkaroon ng hindi bababa sa 110 salita."
 
+    # Retrieve criteria and total points
     criteria = session.get('criteria', [])
     if not criteria:
         return "No criteria set for grading."
@@ -72,54 +71,59 @@ def grade_essay(essay_text, context_text):
         return "No valid criteria to grade the essay."
 
     total_points_received = 0
-    grades_per_criterion = []
+    justifications = {}
 
-    # Compile regex patterns with flexibility
-    grade_pattern = re.compile(r"Grade:\s*(\d+(?:\.\d+)?)\/(\d+)")
-    justification_pattern = re.compile(r"Justification:\s*(.+)")
+    # Collect grades per criterion
+    grades_per_criterion = []
+    
+    # Compile the regular expression pattern for grade and justification extraction
+    grade_pattern = re.compile(r"Grade:\s*(\d+(\.\d+)?)\/(\d+)")
+    justification_pattern = re.compile(r"Justification:\s*(.*)")
 
     for criterion in criteria:
         truncated_essay = essay_text[:1000]  # Limit essay length for context
 
+        # Modify the prompt for grading
         response = client.chat.completions.create(
             model="gpt-4o",
             messages=[{
                 "role": "user",
                 "content": (f"Grade the following essay based on the criterion '{criterion['name']}' out of "
                             f"{criterion['points_possible']} points. "
-                            "Do not be too strict when grading. Consider the context and criteria. "
-                            "Respond in Filipino and provide a high grade if deserved, based on the criterion. "
+                            "Do not be too strict when grading. Consider the context and criteria. ALWAYS Respond in Filipino. Make sure to not be too strict and allow for a high grade if the text provided is deserving of it (for this, refer to the criterion)."
                             f"Essay:\n{truncated_essay}\n\n"
-                            f"Context:\n{context_text}\n\n"
-                            "Strictly provide the response in this format: "
-                            f"Grade: [numeric value]/{criterion['points_possible']} Justification: [text].")
+                            f"Use the context below to inform your grading and be sure to take every detail from it since it is very important:\n\n{context_text}\n\n"
+                            f"Make sure to strictly provide the grade for this criterion in the following format: "
+                            f"Grade: [numeric value]/{criterion['points_possible']} Justification: [brief justification (max 20 words)].")
             }]
         )
 
+        # Validate response
         if not hasattr(response, 'choices') or len(response.choices) == 0:  # type: ignore
-            return f"Invalid response for criterion '{criterion['name']}'. No choices found."
+            return f"Invalid response received for criterion '{criterion['name']}'. No choices were found."
 
-        raw_grade = preprocess_input(response.choices[0].message.content.strip())  # type: ignore
+        raw_grade = response.choices[0].message.content.strip()  # type: ignore
         print(f"Raw grade for {criterion['name']}: {raw_grade}")  # Debug print
 
-        # Validate using regex
+        # Extract grade and justification using regex
         grade_match = grade_pattern.search(raw_grade)
         justification_match = justification_pattern.search(raw_grade)
 
         if not grade_match or not justification_match:
-            print(f"Invalid format: {raw_grade}")
-            return (f"Invalid grade format for criterion '{criterion['name']}'. "
-                    "Expected format: 'Grade: [score]/[total] Justification: [text]'")
+            return f"Invalid grade format received for criterion '{criterion['name']}'. Expected 'Grade: [score]/[total] Justification: [text]'"
 
+        # Parse the grade and justification
         points_received = float(grade_match.group(1))
-        justification = justification_match.group(1)
+        justification = justification_match.group(1) if justification_match else "No justification provided."
 
-        grades_per_criterion.append(
-            f"Criterion: {criterion['name']} - Grade: {points_received}/{criterion['points_possible']} "
-            f"- Justification: {justification}"
-        )
+        # Save the grade and justification
+        justifications[criterion['name']] = justification
         total_points_received += points_received
 
+        # Save the grade per criterion
+        grades_per_criterion.append(f"Criterion: {criterion['name']} - Grade: {points_received}/{criterion['points_possible']} - Justification: {justification}")
+
+    # Calculate total percentage and letter grade
     percentage = (total_points_received / total_points_possible) * 100
     letter_grade = (
         "A+" if percentage >= 98 else
@@ -133,6 +137,7 @@ def grade_essay(essay_text, context_text):
         "D" if percentage >= 75 else "F"
     )
 
+    # Format the final output including grades per criterion
     justification_summary = "\n".join(grades_per_criterion)
 
     return (f"Draft Grade: {letter_grade}\n"
@@ -168,9 +173,9 @@ def index():
         session['original_text'] = essay  
 
         # Check if the essay has at least 150 words
-        if len(essay.split()) < 110:
+        if len(essay.split()) < 150:
             return render_template('index.html', essay=essay,
-                                    error="Error: Ang input na teksto ay dapat magkaroon ng hindi bababa sa 110 salita.")
+                                    error="Error: Ang input na teksto ay dapat magkaroon ng hindi bababa sa 150 salita.")
 
         if not context.strip():  # Check if context is empty or just whitespace
             return render_template('index.html', essay=essay,

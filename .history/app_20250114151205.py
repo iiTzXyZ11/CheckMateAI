@@ -34,29 +34,6 @@ def image_to_text(image_file):
         print(f"Error during image processing: {e}")
         return f"An error occurred during image processing: {str(e)}"
 
-# Function to summarize text in Filipino
-def generate_summary(text):
-    if len(text.split()) < 110:
-        return "Error: Ang input na teksto ay dapat magkaroon ng hindi bababa sa 110 salita."
-
-    try:
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[{"role": "user", "content": f"Summarize this text in Filipino:\n\n{text}",}]
-        )
-
-        if not response.choices: # type: ignore
-            print("No choices in response for summary.")
-            return "No summary could be generated."
-
-        summary_content = response.choices[0].message.content.strip() # type: ignore
-        print(f"Generated summary: {summary_content}")
-        return summary_content or "No summary could be generated."
-
-    except Exception as e:
-        print(f"Error during summary generation: {e}")
-        return f"An error occurred during summarization: {str(e)}"
-
 # Grade essay function
 def grade_essay(essay_text, context_text):
     # Check essay length early
