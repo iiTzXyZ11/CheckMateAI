@@ -364,7 +364,7 @@ body {
   }
 
   .top-bar{
-    top:clamp(3.6rem, 8vh, 5.3rem);
+    top:clamp(3.6rem, 8vh, 4.8rem);
   }
 
   .bottom .chessboard{

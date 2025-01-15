@@ -364,7 +364,7 @@ body {
   }
 
   .top-bar{
-    top:clamp(3.6rem, 8vh, 5.3rem);
+    top:clamp(3.6rem, 8vh, 3.8rem);
   }
 
   .bottom .chessboard{
@@ -395,7 +395,7 @@ body {
   }
 
   .title h1{
-    margin-top: clamp(13rem, 15vw, 23rem);
+    margin-top: clamp(9rem, 20vw, 23rem);
     font-size: clamp(1rem, 2.5vw, 3rem);
   }
 
