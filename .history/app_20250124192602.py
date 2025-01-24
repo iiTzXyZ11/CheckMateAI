@@ -116,17 +116,12 @@ def grade_essay(essay_text, context_text):
         grade_match = grade_pattern.search(raw_grade)
         justification_match = justification_pattern.search(raw_grade)
 
-        # If no grade is found, default to 0 points
-        if not grade_match:
-            points_received = 0
-        else:
-            points_received = float(grade_match.group(1))
+        if not grade_match or not justification_match:
+            return f"Invalid grade format received for criterion '{criterion['name']}'. Expected 'Grade: [score]/[total] Justification: [text]'"
 
-        # If no justification is found, provide a default message
-        if not justification_match:
-            justification = "No justification provided."
-        else:
-            justification = justification_match.group(1)
+        # Parse the grade and justification
+        points_received = float(grade_match.group(1))
+        justification = justification_match.group(1) if justification_match else "No justification provided."
 
         # Save the grade and justification
         justifications[criterion['name']] = justification

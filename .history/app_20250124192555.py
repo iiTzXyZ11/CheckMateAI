@@ -90,18 +90,12 @@ def grade_essay(essay_text, context_text):
             messages=[{
                 "role": "user",
                 "content": (f"Grade the following essay based on the criterion '{criterion['name']}' out of "
-                    f"{criterion['points_possible']} points. Please be consistent and fair in your grading, "
-                    "focusing on the specific aspects of the essay that correspond to the given criterion. "
-                    "Do not be overly lenient but also avoid being too strict. Ensure the grading is based on the "
-                    "clarity, depth, and relevance of the content. Consider the context provided, but do not let "
-                    "it significantly influence the score unless directly related to the criterion. "
-                    "Respond in Filipino and provide a high grade if the essay meets the criterion , but "
-                    "maintain consistency across grading for different essays with the same conditions. "
-                    f"Essay:\n{truncated_essay}\n\n"
-                    f"Context:\n{context_text}\n\n"
-                    "Strictly follow the grading format and provide both the grade and a detailed justification: "
-                    f"Grade: [numeric value]/{criterion['points_possible']} Justification: [text]. "
-                    "Ensure the justification is specific to the essay's performance in relation to the criterion.")
+                            f"{criterion['points_possible']} points. "
+                            "Do not be too strict when grading. Consider the context and criteria. ALWAYS Respond in Filipino. Make sure to not be too strict and allow for a high grade if the text provided is deserving of it (for this, refer to the criterion)."
+                            f"Essay:\n{truncated_essay}\n\n"
+                            f"Use the context below to inform your grading and be sure to take every detail from it since it is very important:\n\n{context_text}\n\n"
+                            f"Make sure to strictly provide the grade for this criterion in the following format: "
+                            f"Grade: [numeric value]/{criterion['points_possible']} Justification: [brief justification (max 20 words)].")
             }]
         )
 
@@ -116,17 +110,12 @@ def grade_essay(essay_text, context_text):
         grade_match = grade_pattern.search(raw_grade)
         justification_match = justification_pattern.search(raw_grade)
 
-        # If no grade is found, default to 0 points
-        if not grade_match:
-            points_received = 0
-        else:
-            points_received = float(grade_match.group(1))
+        if not grade_match or not justification_match:
+            return f"Invalid grade format received for criterion '{criterion['name']}'. Expected 'Grade: [score]/[total] Justification: [text]'"
 
-        # If no justification is found, provide a default message
-        if not justification_match:
-            justification = "No justification provided."
-        else:
-            justification = justification_match.group(1)
+        # Parse the grade and justification
+        points_received = float(grade_match.group(1))
+        justification = justification_match.group(1) if justification_match else "No justification provided."
 
         # Save the grade and justification
         justifications[criterion['name']] = justification

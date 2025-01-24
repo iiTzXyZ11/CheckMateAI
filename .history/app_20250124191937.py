@@ -55,29 +55,43 @@ def generate_summary(text):
     except Exception as e:
         print(f"Error during summary generation: {e}")
         return f"An error occurred during summarization: {str(e)}"
+    
+def enforce_strict_format(raw_grade):
+    """Enforce strict grading format: 'Grade: [score]/[total] Justification: [text]'."""
+    raw_grade = raw_grade.replace("*", "").replace("_", "").strip()
 
+    # Adjusting regex to account for flexible spacing
+    grade_pattern = re.compile(r"Grade:\s*([\d\.]+)\s*/\s*([\d\.]+)\s*Justification:\s*(.*)", re.DOTALL)
+
+    match = grade_pattern.match(raw_grade)
+    if not match:
+        raise ValueError(f"Invalid grade format. Expected 'Grade: [score]/[total] Justification: [text]', got: {raw_grade}")
+
+    score = float(match.group(1))
+    total = float(match.group(2))
+    justification = match.group(3).strip()
+
+    if not justification:
+        justification = "No justification provided."
+
+    return f"Grade: {score}/{total} Justification: {justification}"
 # Grade essay function
 def grade_essay(essay_text, context_text):
-    # Check essay length once, early return if too short
+    # Check essay length early return if too short
     if len(essay_text.split()) < 150:
         return "Error: Ang input na teksto ay dapat magkaroon ng hindi bababa sa 150 salita."
 
     # Retrieve criteria and total points
     criteria = session.get('criteria', [])
-    if not criteria:
-        return "No criteria set for grading."
-
     total_points_possible = session.get('total_points_possible', 0)
-    if total_points_possible == 0:
+    
+    if not criteria or total_points_possible == 0:
         return "No valid criteria to grade the essay."
 
     total_points_received = 0
-    justifications = {}
-
-    # Collect grades per criterion
     grades_per_criterion = []
-    
-    # Compile the regular expression pattern for grade and justification extraction
+
+    # Compile regex pattern for grade and justification extraction
     grade_pattern = re.compile(r"Grade:\s*(\d+(\.\d+)?)\/(\d+)")
     justification_pattern = re.compile(r"Justification:\s*(.*)")
 
@@ -90,52 +104,36 @@ def grade_essay(essay_text, context_text):
             messages=[{
                 "role": "user",
                 "content": (f"Grade the following essay based on the criterion '{criterion['name']}' out of "
-                    f"{criterion['points_possible']} points. Please be consistent and fair in your grading, "
-                    "focusing on the specific aspects of the essay that correspond to the given criterion. "
-                    "Do not be overly lenient but also avoid being too strict. Ensure the grading is based on the "
-                    "clarity, depth, and relevance of the content. Consider the context provided, but do not let "
-                    "it significantly influence the score unless directly related to the criterion. "
-                    "Respond in Filipino and provide a high grade if the essay meets the criterion , but "
-                    "maintain consistency across grading for different essays with the same conditions. "
-                    f"Essay:\n{truncated_essay}\n\n"
-                    f"Context:\n{context_text}\n\n"
-                    "Strictly follow the grading format and provide both the grade and a detailed justification: "
-                    f"Grade: [numeric value]/{criterion['points_possible']} Justification: [text]. "
-                    "Ensure the justification is specific to the essay's performance in relation to the criterion.")
+                            f"{criterion['points_possible']} points. Please grade fairly and ensure the format is: "
+                            "Grade: [score]/[total] Justification: [text].\n\nEssay:\n{truncated_essay}\n\n"
+                            f"Context:\n{context_text}\n\n")
             }]
         )
 
-        # Validate response
-        if not hasattr(response, 'choices') or len(response.choices) == 0:  # type: ignore
-            return f"Invalid response received for criterion '{criterion['name']}'. No choices were found."
+        if not response.choices:  # Validate response
+            return f"Invalid response for criterion '{criterion['name']}'."
 
-        raw_grade = response.choices[0].message.content.strip()  # type: ignore
-        print(f"Raw grade for {criterion['name']}: {raw_grade}")  # Debug print
+        raw_grade = response.choices[0].message.content.strip()
 
-        # Extract grade and justification using regex
-        grade_match = grade_pattern.search(raw_grade)
-        justification_match = justification_pattern.search(raw_grade)
+        try:
+            # Enforce strict format and extract grade and justification
+            formatted_grade = enforce_strict_format(raw_grade)
+            grade_match = grade_pattern.search(formatted_grade)
+            justification_match = justification_pattern.search(formatted_grade)
 
-        # If no grade is found, default to 0 points
-        if not grade_match:
-            points_received = 0
-        else:
+            if not grade_match or not justification_match:
+                raise ValueError(f"Invalid format for criterion '{criterion['name']}'.")
+
             points_received = float(grade_match.group(1))
+            justification = justification_match.group(1) or "No justification provided."
 
-        # If no justification is found, provide a default message
-        if not justification_match:
-            justification = "No justification provided."
-        else:
-            justification = justification_match.group(1)
+            total_points_received += points_received
+            grades_per_criterion.append(f"Criterion: {criterion['name']} - Grade: {points_received}/{criterion['points_possible']} - Justification: {justification}")
 
-        # Save the grade and justification
-        justifications[criterion['name']] = justification
-        total_points_received += points_received
+        except ValueError as e:
+            return str(e)
 
-        # Save the grade per criterion
-        grades_per_criterion.append(f"Criterion: {criterion['name']} - Grade: {points_received}/{criterion['points_possible']} - Justification: {justification}")
-
-    # Calculate total percentage and letter grade
+    # Calculate percentage and letter grade
     percentage = (total_points_received / total_points_possible) * 100
     letter_grade = (
         "A+" if percentage >= 98 else
@@ -149,12 +147,11 @@ def grade_essay(essay_text, context_text):
         "D" if percentage >= 75 else "F"
     )
 
-    # Format the final output including grades per criterion
-    justification_summary = "\n".join(grades_per_criterion)
-
+    # Return final summary
     return (f"Draft Grade: {letter_grade}\n"
             f"Draft Score: {total_points_received}/{total_points_possible}\n\n"
-            f"Justifications:\n{justification_summary}")
+            f"Justifications:\n" + "\n".join(grades_per_criterion))
+
 
 @app.route('/')  # Define the root URL route
 def home():
