@@ -195,7 +195,7 @@ def grade_essay(essay_text, context_text):
                     "Do not be overly lenient but also avoid being too strict. Ensure the grading is based on the "
                     "clarity, depth, and relevance of the content. Consider the context provided, but do not let "
                     "it significantly influence the score unless directly related to the criterion. "
-                    "Respond in Filipino and provide a high grade if the essay meets the criterion , but "
+                    "Respond in Filipino and provide a high grade if the essay meets the criterion well, but "
                     "maintain consistency across grading for different essays with the same conditions. "
                     f"Essay:\n{truncated_essay}\n\n"
                     f"Context:\n{context_text}\n\n"

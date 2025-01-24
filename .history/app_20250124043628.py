@@ -1,31 +1,23 @@
-import os
+import os  # Standard library
 import re
 import logging
+from flask import Flask, render_template, redirect, url_for, request, session
 from dotenv import load_dotenv
-from flask import Flask, render_template, redirect, url_for, request, session, abort, Response
+from flask_wtf import CSRFProtect
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
-from werkzeug.utils import secure_filename
 
-from g4f.client import Client
+from g4f.client import Client  # GPT-based client
 from g4f.Provider import GeminiPro
 
-# Load environment variables
 load_dotenv()
 
-# Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     filename='checkmate_app.log'
 )
-# Initialize logger
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
-handler = logging.StreamHandler()
-formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-handler.setFormatter(formatter)
-logger.addHandler(handler)
 
 class Config:
     SECRET_KEY = os.urandom(24)
@@ -42,6 +34,9 @@ def create_app(config_class=DevelopmentConfig):
     app = Flask(__name__)
     app.config.from_object(config_class)
     
+    # CSRF Protection
+    csrf = CSRFProtect(app)
+    
     # Rate Limiting
     limiter = Limiter(
         get_remote_address,
@@ -50,79 +45,39 @@ def create_app(config_class=DevelopmentConfig):
         storage_uri="memory://"
     )
 
-    return app, limiter
+    return app
 
-# Unpack both app and limiter
-app, limiter = create_app()
+app = Flask(__name__)
+app.secret_key = os.urandom(24)  # Generate a random secret key
 
-# Secure client initialization
-try:
-    client = Client()
-    image_to_text_client = Client(
-        api_key="YOUR_API_KEY",
-        provider=GeminiPro
-    )
-    
-except ValueError as e:
-    logger.critical(str(e))
-    raise
+# Initialize the GPT client for text generation and grading
+client = Client()
+image_to_text_client = Client(api_key="AIzaSyCX13POLxDWzFWzOfZr7rn3vjG0eNUXlfk", provider=GeminiPro)
 
-def sanitize_input(input_text):
-    """Sanitize and validate input text"""
-    if not isinstance(input_text, str):
-        raise ValueError("Input must be a string")
-    
-    # Remove potentially harmful characters and excess whitespace
-    sanitized_text = re.sub(r'[<>&]', '', input_text)
-    return re.sub(r'\s+', ' ', sanitized_text.strip())
-
+# Helper function for preprocessing input
 def preprocess_input(input_text):
-    """Normalize and validate input"""
-    try:
-        return sanitize_input(input_text)
-    except ValueError as e:
-        logger.warning(f"Input preprocessing error: {e}")
-        return ""
+    """Normalize input by stripping extra spaces and newlines."""
+    return re.sub(r'\s+', ' ', input_text.strip())
 
+# Function to convert image to text
 def image_to_text(image_file):
-    """Convert image to text with robust error handling"""
     try:
-        if not image_file:
-            return "No image provided"
-
-        # Validate the image type (only accept image files)
-        if not allowed_file(image_file.filename):
-            return "Invalid file type. Only image files are allowed."
-
-        # Save the file securely
-        filename = secure_filename(image_file.filename)
-        logger.info(f"Processing image: {filename}")
-        
+        print(f"Received the image: {image_file.filename}")
         response = image_to_text_client.chat.completions.create(
             model="gemini-1.5-pro-latest",
             messages=[{"role": "user", "content": "extract the text from this image"}],
             image=image_file
         )
-        
-        if not response or not hasattr(response, 'choices') or len(response.choices) == 0:
-            logger.warning("No text extracted from image")
-            return "No text could be extracted."
-        
-        content = response.choices[0].message.content
-        extracted_text = content.strip() if content else "No text could be extracted."
-        
-        logger.info(f"Successfully extracted text from image: {len(extracted_text)} characters")
-        return extracted_text
-    
+        if hasattr(response, 'choices') and len(response.choices) > 0:  # type: ignore
+            content = response.choices[0].message.content  # type: ignore
+            print(f"Extracted content: {content}")
+            return content.strip() if content else "No text could be extracted."
+        return "No text could be extracted."
     except Exception as e:
-        logger.error(f"Image processing error: {type(e).__name__} - {str(e)}")
-        return f"Image processing failed: {str(e)}"
+        print(f"Error during image processing: {e}")
+        return f"An error occurred during image processing: {str(e)}"
 
-def allowed_file(filename):
-    """Check if the file has an allowed extension"""
-    allowed_extensions = {'png', 'jpg', 'jpeg', 'gif'}
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in allowed_extensions
-
+# Function to summarize text in Filipino
 def generate_summary(text):
     """Generate summary with improved error handling"""
     try:
@@ -146,26 +101,7 @@ def generate_summary(text):
         logger.error(f"Summary generation error: {e}")
         return f"An error occurred during summarization: {str(e)}"
 
-def enforce_strict_format(raw_grade):
-    """Enforce strict grading format: 'Grade: [score]/[total] Justification: [text]'."""
-    raw_grade = raw_grade.replace("*", "").replace("_", "").strip()
-
-    # Adjusting regex to account for flexible spacing
-    grade_pattern = re.compile(r"Grade:\s*([\d\.]+)\s*/\s*([\d\.]+)\s*Justification:\s*(.*)", re.DOTALL)
-
-    match = grade_pattern.match(raw_grade)
-    if not match:
-        raise ValueError(f"Invalid grade format. Expected 'Grade: [score]/[total] Justification: [text]', got: {raw_grade}")
-
-    score = float(match.group(1))
-    total = float(match.group(2))
-    justification = match.group(3).strip()
-
-    if not justification:
-        justification = "No justification provided."
-
-    return f"Grade: {score}/{total} Justification: {justification}"
-
+# Grade essay function
 def grade_essay(essay_text, context_text):
     # Check essay length early
     if len(essay_text.split()) < 110:
@@ -182,6 +118,10 @@ def grade_essay(essay_text, context_text):
     total_points_received = 0
     grades_per_criterion = []
 
+    # Compile regex patterns with flexibility
+    grade_pattern = re.compile(r"Grade:\s*(\d+(?:\.\d+)?)\/(\d+)")
+    justification_pattern = re.compile(r"Justification:\s*(.+)")
+
     for criterion in criteria:
         truncated_essay = essay_text[:1000]  # Limit essay length for context
 
@@ -190,18 +130,13 @@ def grade_essay(essay_text, context_text):
             messages=[{
                 "role": "user",
                 "content": (f"Grade the following essay based on the criterion '{criterion['name']}' out of "
-                    f"{criterion['points_possible']} points. Please be consistent and fair in your grading, "
-                    "focusing on the specific aspects of the essay that correspond to the given criterion. "
-                    "Do not be overly lenient but also avoid being too strict. Ensure the grading is based on the "
-                    "clarity, depth, and relevance of the content. Consider the context provided, but do not let "
-                    "it significantly influence the score unless directly related to the criterion. "
-                    "Respond in Filipino and provide a high grade if the essay meets the criterion , but "
-                    "maintain consistency across grading for different essays with the same conditions. "
-                    f"Essay:\n{truncated_essay}\n\n"
-                    f"Context:\n{context_text}\n\n"
-                    "Strictly follow the grading format and provide both the grade and a detailed justification: "
-                    f"Grade: [numeric value]/{criterion['points_possible']} Justification: [text]. "
-                    "Ensure the justification is specific to the essay's performance in relation to the criterion.")
+                            f"{criterion['points_possible']} points. "
+                            "Do not be too strict when grading. Consider the context and criteria. "
+                            "Respond in Filipino and provide a high grade if deserved, based on the criterion. "
+                            f"Essay:\n{truncated_essay}\n\n"
+                            f"Context:\n{context_text}\n\n"
+                            "Strictly provide the response in this format: "
+                            f"Grade: [numeric value]/{criterion['points_possible']} Justification: [text].")
             }]
         )
 
@@ -211,20 +146,12 @@ def grade_essay(essay_text, context_text):
         raw_grade = preprocess_input(response.choices[0].message.content.strip())  # type: ignore
         print(f"Raw grade for {criterion['name']}: {raw_grade}")  # Debug print
 
-        if not raw_grade:  # Check if the raw grade is empty
-            return f"Empty response for criterion '{criterion['name']}'. Model did not provide a valid grade and justification."
-
-        # Use the enforce_strict_format function to validate and format the grade
-        try:
-            formatted_grade = enforce_strict_format(raw_grade)
-        except ValueError as e:
-            return f"Invalid grade format for criterion '{criterion['name']}': {e}"
-
-        # Extract the grade and justification from the formatted output
-        grade_match = re.search(r"Grade:\s*(\d+(?:\.\d+)?)\/(\d+)", formatted_grade)
-        justification_match = re.search(r"Justification:\s*(.+)", formatted_grade)
+        # Validate using regex
+        grade_match = grade_pattern.search(raw_grade)
+        justification_match = justification_pattern.search(raw_grade)
 
         if not grade_match or not justification_match:
+            print(f"Invalid format: {raw_grade}")
             return (f"Invalid grade format for criterion '{criterion['name']}'. "
                     "Expected format: 'Grade: [score]/[total] Justification: [text]'")
 
@@ -261,8 +188,9 @@ def home():
     logger.info("Home page accessed")
     return redirect(url_for('front_page'))
 
-@app.route('/front')
+@app.route('/front')  # Front page route
 def front_page():
+    print("Front page accessed")  # Debug print
     return render_template('front_page.html')
 
 @app.route('/scan', methods=['GET', 'POST'])
@@ -270,17 +198,20 @@ def front_page():
 def index():
     try:
         if request.method == 'POST':
+            # Input validation
             context = preprocess_input(request.form.get('context', ''))
             
             if not context:
                 return render_template('index.html', error="Context is required")
 
+            # Image or text processing
             image = request.files.get('image')
             essay = image_to_text(image) if image else preprocess_input(request.form.get('essay', ''))
 
             if len(essay.split()) < 110:
                 return render_template('index.html', error="Essay must be at least 110 words")
 
+            # Store in session securely
             session['original_text'] = essay
             session['context_text'] = context
             session.modified = True
@@ -293,7 +224,8 @@ def index():
         logger.error(f"Scan route error: {e}")
         abort(500)
 
-@app.route('/process_essay', methods=['GET', 'POST'])
+
+@app.route('/process_essay', methods=['GET', 'POST'])  # Define the route for processing the essay
 def process_essay():
     original_text = session.get('original_text', '')
     context_text = session.get('context_text', '')
@@ -301,7 +233,10 @@ def process_essay():
     if not original_text or not context_text:
         return redirect(url_for('home'))
 
+    # Generate summary
     summary_result = generate_summary(original_text)
+
+    # Grade the essay based on criteria
     grade_result = grade_essay(original_text, context_text)
 
     return render_template('results.html', essay=original_text, summary=summary_result, grade=grade_result)
@@ -309,11 +244,13 @@ def process_essay():
 @app.route('/set_criteria', methods=['GET', 'POST'])
 def set_criteria():
     if request.method == 'POST':
+        # Retrieve the criterion details from the form
         criterion_name = request.form['criterion_name']
-        weight = float(request.form['weight']) / 100
+        weight = float(request.form['weight']) / 100  # Convert to fraction
         points_possible = float(request.form['points_possible'])
         detailed_breakdown = request.form['detailed_breakdown']
 
+        # Create a new criterion entry
         new_criterion = {
             'name': criterion_name,
             'weight': weight,
@@ -321,15 +258,18 @@ def set_criteria():
             'detailed_breakdown': detailed_breakdown
         }
 
+        # Retrieve existing criteria from the session, or initialize if none exist
         if 'criteria' not in session:
             session['criteria'] = []
-        session['criteria'].append(new_criterion)
-        session.modified = True
+        session['criteria'].append(new_criterion)  # Add the new criterion
+        session.modified = True  # Mark the session as modified
 
+        # Recalculate total points possible
         session['total_points_possible'] = sum(criterion['points_possible'] for criterion in session['criteria'])
 
-        return redirect(url_for('set_criteria'))
+        return redirect(url_for('set_criteria'))  # Redirect to the same page to display updated criteria
 
+    # Load existing criteria for the GET request
     criteria = session.get('criteria', [])
     total_points_possible = session.get('total_points_possible', 0)
 
@@ -337,17 +277,20 @@ def set_criteria():
 
 @app.route('/clear_session', methods=['POST'])
 def clear_session():
-    session.pop('criteria', None)
-    session.pop('total_points_possible', None)
-    return redirect(url_for('set_criteria'))
+    session.pop('criteria', None)  # Remove the criteria data from the session
+    session.pop('total_points_possible', None)  # Remove any other session data if needed
+    return redirect(url_for('set_criteria'))  # Redirect to the set criteria page
 
-@app.route('/contact')
+
+# New route for 'Contact Us'
+@app.route('/contact')  # Define the contact route
 def contact():
-    return redirect("https://www.facebook.com/profile.php?id=61571739043757")
+    return redirect("https://www.facebook.com/profile.php?id=61571739043757")  # Replace with your actual Facebook page URL
 
+# New route for 'How to Use'
 @app.route('/how-to-use', methods=['GET'])
 def how_to_use():
     return render_template('how_to_use.html')
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    app.run(debug=True)

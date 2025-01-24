@@ -150,7 +150,6 @@ def enforce_strict_format(raw_grade):
     """Enforce strict grading format: 'Grade: [score]/[total] Justification: [text]'."""
     raw_grade = raw_grade.replace("*", "").replace("_", "").strip()
 
-    # Adjusting regex to account for flexible spacing
     grade_pattern = re.compile(r"Grade:\s*([\d\.]+)\s*/\s*([\d\.]+)\s*Justification:\s*(.*)", re.DOTALL)
 
     match = grade_pattern.match(raw_grade)
@@ -190,18 +189,13 @@ def grade_essay(essay_text, context_text):
             messages=[{
                 "role": "user",
                 "content": (f"Grade the following essay based on the criterion '{criterion['name']}' out of "
-                    f"{criterion['points_possible']} points. Please be consistent and fair in your grading, "
-                    "focusing on the specific aspects of the essay that correspond to the given criterion. "
-                    "Do not be overly lenient but also avoid being too strict. Ensure the grading is based on the "
-                    "clarity, depth, and relevance of the content. Consider the context provided, but do not let "
-                    "it significantly influence the score unless directly related to the criterion. "
-                    "Respond in Filipino and provide a high grade if the essay meets the criterion , but "
-                    "maintain consistency across grading for different essays with the same conditions. "
-                    f"Essay:\n{truncated_essay}\n\n"
-                    f"Context:\n{context_text}\n\n"
-                    "Strictly follow the grading format and provide both the grade and a detailed justification: "
-                    f"Grade: [numeric value]/{criterion['points_possible']} Justification: [text]. "
-                    "Ensure the justification is specific to the essay's performance in relation to the criterion.")
+                            f"{criterion['points_possible']} points. "
+                            "Do not be too strict when grading. Consider the context and criteria. "
+                            "Respond in Filipino and provide a high grade if deserved, based on the criterion. "
+                            f"Essay:\n{truncated_essay}\n\n"
+                            f"Context:\n{context_text}\n\n"
+                            "Strictly provide the response in this format: "
+                            f"Grade: [numeric value]/{criterion['points_possible']} Justification: [text].")
             }]
         )
 
@@ -210,9 +204,6 @@ def grade_essay(essay_text, context_text):
 
         raw_grade = preprocess_input(response.choices[0].message.content.strip())  # type: ignore
         print(f"Raw grade for {criterion['name']}: {raw_grade}")  # Debug print
-
-        if not raw_grade:  # Check if the raw grade is empty
-            return f"Empty response for criterion '{criterion['name']}'. Model did not provide a valid grade and justification."
 
         # Use the enforce_strict_format function to validate and format the grade
         try:
@@ -255,6 +246,8 @@ def grade_essay(essay_text, context_text):
     return (f"Draft Grade: {letter_grade}\n"
             f"Draft Score: {total_points_received}/{total_points_possible}\n\n"
             f"Justifications:\n{justification_summary}")
+
+
 
 @app.route('/')
 def home():

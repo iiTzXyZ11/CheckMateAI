@@ -42,6 +42,9 @@ def create_app(config_class=DevelopmentConfig):
     app = Flask(__name__)
     app.config.from_object(config_class)
     
+    # Removed CSRF Protection
+    # csrf = CSRFProtect(app)  # Comment out or remove this line
+    
     # Rate Limiting
     limiter = Limiter(
         get_remote_address,
@@ -148,9 +151,10 @@ def generate_summary(text):
 
 def enforce_strict_format(raw_grade):
     """Enforce strict grading format: 'Grade: [score]/[total] Justification: [text]'."""
+    # Remove extra symbols like asterisks or underscores that the AI may insert
     raw_grade = raw_grade.replace("*", "").replace("_", "").strip()
 
-    # Adjusting regex to account for flexible spacing
+    # Regex to match the required format, allowing for newlines within justification
     grade_pattern = re.compile(r"Grade:\s*([\d\.]+)\s*/\s*([\d\.]+)\s*Justification:\s*(.*)", re.DOTALL)
 
     match = grade_pattern.match(raw_grade)
@@ -161,100 +165,117 @@ def enforce_strict_format(raw_grade):
     total = float(match.group(2))
     justification = match.group(3).strip()
 
+    # Provide fallback for missing justification
     if not justification:
         justification = "No justification provided."
 
+    # Rebuild the grade in the exact format
     return f"Grade: {score}/{total} Justification: {justification}"
 
+
 def grade_essay(essay_text, context_text):
-    # Check essay length early
-    if len(essay_text.split()) < 110:
-        return "Error: Ang input na teksto ay dapat magkaroon ng hindi bababa sa 110 salita."
+    """Grade essay with robust error handling and logging"""
+    try:
+        # Validate input length
+        if len(essay_text.split()) < 110:
+            logger.warning("Essay too short for grading")
+            return "Error: Ang input na teksto ay dapat magkaroon ng hindi bababa sa 110 salita."
 
-    criteria = session.get('criteria', [])
-    if not criteria:
-        return "No criteria set for grading."
+        # Validate criteria
+        criteria = session.get('criteria', [])
+        if not criteria:
+            logger.warning("No grading criteria set")
+            return "No criteria set for grading."
 
-    total_points_possible = session.get('total_points_possible', 0)
-    if total_points_possible == 0:
-        return "No valid criteria to grade the essay."
+        # Calculate total possible points
+        total_points_possible = sum(criterion['points_possible'] for criterion in criteria)
+        if total_points_possible == 0:
+            logger.warning("Total points possible is zero")
+            return "No valid criteria to grade the essay."
 
-    total_points_received = 0
-    grades_per_criterion = []
+        total_points_received = 0
+        grades_per_criterion = []
 
-    for criterion in criteria:
-        truncated_essay = essay_text[:1000]  # Limit essay length for context
+        # Process each grading criterion
+        for criterion in criteria:
+            # Truncate essay to prevent excessive token usage
+            truncated_essay = essay_text[:1000]  
 
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[{
-                "role": "user",
-                "content": (f"Grade the following essay based on the criterion '{criterion['name']}' out of "
-                    f"{criterion['points_possible']} points. Please be consistent and fair in your grading, "
-                    "focusing on the specific aspects of the essay that correspond to the given criterion. "
-                    "Do not be overly lenient but also avoid being too strict. Ensure the grading is based on the "
-                    "clarity, depth, and relevance of the content. Consider the context provided, but do not let "
-                    "it significantly influence the score unless directly related to the criterion. "
-                    "Respond in Filipino and provide a high grade if the essay meets the criterion , but "
-                    "maintain consistency across grading for different essays with the same conditions. "
-                    f"Essay:\n{truncated_essay}\n\n"
-                    f"Context:\n{context_text}\n\n"
-                    "Strictly follow the grading format and provide both the grade and a detailed justification: "
-                    f"Grade: [numeric value]/{criterion['points_possible']} Justification: [text]. "
-                    "Ensure the justification is specific to the essay's performance in relation to the criterion.")
-            }]
+            try:
+                response = client.chat.completions.create(
+                    model="gpt-4o",
+                    messages=[{
+                        "role": "user",
+                        "content": (
+                            f"Grade the following essay based on the criterion '{criterion['name']}' "
+                            f"out of {criterion['points_possible']} points. "
+                            "Do not be too strict. Consider context and criteria."
+                            "Respond in Filipino and provide a high grade if deserved, based on each criterion. "
+                            f"Essay:\n{truncated_essay}\n\n"
+                            f"Context:\n{context_text}\n\n"
+                            "Response format: "
+                            f"Grade: [numeric value]/{criterion['points_possible']} Justification: [text]."
+                        )
+                    }]
+                )
+
+                # Validate response structure
+                if not hasattr(response, 'choices') or len(response.choices) == 0:
+                    logger.error(f"Invalid AI response for criterion: {criterion['name']}")
+                    return f"Invalid response for criterion '{criterion['name']}'."
+
+                # Process AI-generated grade
+                raw_grade = preprocess_input(response.choices[0].message.content.strip())
+                logger.info(f"Raw grade for {criterion['name']}: {raw_grade}")
+
+                # Enforce strict format using the new function
+                formatted_grade = enforce_strict_format(raw_grade)
+                logger.info(f"Formatted grade for {criterion['name']}: {formatted_grade}")
+
+                # Extract grade components
+                grade_match = re.search(r"Grade:\s*([\d\.]+)\s*/\s*([\d\.]+)", formatted_grade)
+                points_received = float(grade_match.group(1))
+                total_points = float(grade_match.group(2))
+
+                # Ensure points received does not exceed total points
+                if points_received > total_points:
+                    logger.warning(f"Points received exceed total points for '{criterion['name']}'")
+                    return f"Invalid grade for '{criterion['name']}': points received cannot exceed total points."
+
+                # Record criterion grade
+                grades_per_criterion.append(
+                    f"Criterion: {criterion['name']} - Grade: {points_received}/{total_points}"
+                )
+                total_points_received += points_received
+
+            except Exception as criterion_error:
+                logger.error(f"Error processing criterion {criterion['name']}: {criterion_error}")
+                return f"Error grading criterion: {criterion['name']}"
+
+        # Calculate final grade
+        percentage = (total_points_received / total_points_possible) * 100
+        letter_grade = (
+            "A+" if percentage >= 98 else
+            "A" if percentage >= 95 else
+            "A-" if percentage >= 93 else
+            "B+" if percentage >= 90 else
+            "B" if percentage >= 85 else
+            "B-" if percentage >= 83 else
+            "C+" if percentage >= 80 else
+            "C" if percentage >= 78 else
+            "D" if percentage >= 75 else "F"
         )
 
-        if not hasattr(response, 'choices') or len(response.choices) == 0:  # type: ignore
-            return f"Invalid response for criterion '{criterion['name']}'. No choices found."
+        # Log grade details
+        logger.info(f"Final Grade: {letter_grade}, Score: {total_points_received}/{total_points_possible}")
 
-        raw_grade = preprocess_input(response.choices[0].message.content.strip())  # type: ignore
-        print(f"Raw grade for {criterion['name']}: {raw_grade}")  # Debug print
+        # Prepare grade report
+        justification_summary = "\n".join(grades_per_criterion)
+        return f"Final Grade: {letter_grade}\nTotal: {total_points_received}/{total_points_possible} points\n{justification_summary}"
 
-        if not raw_grade:  # Check if the raw grade is empty
-            return f"Empty response for criterion '{criterion['name']}'. Model did not provide a valid grade and justification."
-
-        # Use the enforce_strict_format function to validate and format the grade
-        try:
-            formatted_grade = enforce_strict_format(raw_grade)
-        except ValueError as e:
-            return f"Invalid grade format for criterion '{criterion['name']}': {e}"
-
-        # Extract the grade and justification from the formatted output
-        grade_match = re.search(r"Grade:\s*(\d+(?:\.\d+)?)\/(\d+)", formatted_grade)
-        justification_match = re.search(r"Justification:\s*(.+)", formatted_grade)
-
-        if not grade_match or not justification_match:
-            return (f"Invalid grade format for criterion '{criterion['name']}'. "
-                    "Expected format: 'Grade: [score]/[total] Justification: [text]'")
-
-        points_received = float(grade_match.group(1))
-        justification = justification_match.group(1)
-
-        grades_per_criterion.append(
-            f"Criterion: {criterion['name']} - Grade: {points_received}/{criterion['points_possible']} "
-            f"- Justification: {justification}"
-        )
-        total_points_received += points_received
-
-    percentage = (total_points_received / total_points_possible) * 100
-    letter_grade = (
-        "A+" if percentage >= 98 else
-        "A" if percentage >= 95 else
-        "A-" if percentage >= 93 else
-        "B+" if percentage >= 90 else
-        "B" if percentage >= 85 else
-        "B-" if percentage >= 83 else
-        "C+" if percentage >= 80 else
-        "C" if percentage >= 78 else
-        "D" if percentage >= 75 else "F"
-    )
-
-    justification_summary = "\n".join(grades_per_criterion)
-
-    return (f"Draft Grade: {letter_grade}\n"
-            f"Draft Score: {total_points_received}/{total_points_possible}\n\n"
-            f"Justifications:\n{justification_summary}")
+    except Exception as e:
+        logger.error(f"Essay grading error: {e}")
+        return f"An error occurred while grading the essay: {str(e)}"
 
 @app.route('/')
 def home():

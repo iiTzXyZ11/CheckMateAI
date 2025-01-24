@@ -5,7 +5,6 @@ from dotenv import load_dotenv
 from flask import Flask, render_template, redirect, url_for, request, session, abort, Response
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
-from werkzeug.utils import secure_filename
 
 from g4f.client import Client
 from g4f.Provider import GeminiPro
@@ -19,13 +18,7 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     filename='checkmate_app.log'
 )
-# Initialize logger
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
-handler = logging.StreamHandler()
-formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-handler.setFormatter(formatter)
-logger.addHandler(handler)
 
 class Config:
     SECRET_KEY = os.urandom(24)
@@ -38,9 +31,13 @@ class DevelopmentConfig(Config):
 class ProductionConfig(Config):
     DEBUG = False
 
+
 def create_app(config_class=DevelopmentConfig):
     app = Flask(__name__)
     app.config.from_object(config_class)
+    
+    # Removed CSRF Protection
+    # csrf = CSRFProtect(app)  # Comment out or remove this line
     
     # Rate Limiting
     limiter = Limiter(
@@ -59,9 +56,9 @@ app, limiter = create_app()
 try:
     client = Client()
     image_to_text_client = Client(
-        api_key="YOUR_API_KEY",
+        api_key="AIzaSyCX13POLxDWzFWzOfZr7rn3vjG0eNUXlfk",
         provider=GeminiPro
-    )
+        )
     
 except ValueError as e:
     logger.critical(str(e))
@@ -90,13 +87,7 @@ def image_to_text(image_file):
         if not image_file:
             return "No image provided"
 
-        # Validate the image type (only accept image files)
-        if not allowed_file(image_file.filename):
-            return "Invalid file type. Only image files are allowed."
-
-        # Save the file securely
-        filename = secure_filename(image_file.filename)
-        logger.info(f"Processing image: {filename}")
+        logger.info(f"Processing image: {image_file.filename}")
         
         response = image_to_text_client.chat.completions.create(
             model="gemini-1.5-pro-latest",
@@ -117,11 +108,6 @@ def image_to_text(image_file):
     except Exception as e:
         logger.error(f"Image processing error: {type(e).__name__} - {str(e)}")
         return f"Image processing failed: {str(e)}"
-
-def allowed_file(filename):
-    """Check if the file has an allowed extension"""
-    allowed_extensions = {'png', 'jpg', 'jpeg', 'gif'}
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in allowed_extensions
 
 def generate_summary(text):
     """Generate summary with improved error handling"""
@@ -146,115 +132,115 @@ def generate_summary(text):
         logger.error(f"Summary generation error: {e}")
         return f"An error occurred during summarization: {str(e)}"
 
-def enforce_strict_format(raw_grade):
-    """Enforce strict grading format: 'Grade: [score]/[total] Justification: [text]'."""
-    raw_grade = raw_grade.replace("*", "").replace("_", "").strip()
-
-    # Adjusting regex to account for flexible spacing
-    grade_pattern = re.compile(r"Grade:\s*([\d\.]+)\s*/\s*([\d\.]+)\s*Justification:\s*(.*)", re.DOTALL)
-
-    match = grade_pattern.match(raw_grade)
-    if not match:
-        raise ValueError(f"Invalid grade format. Expected 'Grade: [score]/[total] Justification: [text]', got: {raw_grade}")
-
-    score = float(match.group(1))
-    total = float(match.group(2))
-    justification = match.group(3).strip()
-
-    if not justification:
-        justification = "No justification provided."
-
-    return f"Grade: {score}/{total} Justification: {justification}"
-
 def grade_essay(essay_text, context_text):
-    # Check essay length early
-    if len(essay_text.split()) < 110:
-        return "Error: Ang input na teksto ay dapat magkaroon ng hindi bababa sa 110 salita."
+    """Grade essay with robust error handling and logging"""
+    try:
+        # Validate input length
+        if len(essay_text.split()) < 110:
+            logger.warning("Essay too short for grading")
+            return "Error: Ang input na teksto ay dapat magkaroon ng hindi bababa sa 110 salita."
 
-    criteria = session.get('criteria', [])
-    if not criteria:
-        return "No criteria set for grading."
+        # Validate criteria
+        criteria = session.get('criteria', [])
+        if not criteria:
+            logger.warning("No grading criteria set")
+            return "No criteria set for grading."
 
-    total_points_possible = session.get('total_points_possible', 0)
-    if total_points_possible == 0:
-        return "No valid criteria to grade the essay."
+        # Calculate total possible points
+        total_points_possible = sum(criterion['points_possible'] for criterion in criteria)
+        if total_points_possible == 0:
+            logger.warning("Total points possible is zero")
+            return "No valid criteria to grade the essay."
 
-    total_points_received = 0
-    grades_per_criterion = []
+        total_points_received = 0
+        grades_per_criterion = []
 
-    for criterion in criteria:
-        truncated_essay = essay_text[:1000]  # Limit essay length for context
+        # Compile regex patterns for grade validation
+        grade_pattern = re.compile(r"Grade:\s*(\d+(?:\.\d+)?)\/(\d+)")
+        justification_pattern = re.compile(r"Justification:\s*(.+)")
 
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[{
-                "role": "user",
-                "content": (f"Grade the following essay based on the criterion '{criterion['name']}' out of "
-                    f"{criterion['points_possible']} points. Please be consistent and fair in your grading, "
-                    "focusing on the specific aspects of the essay that correspond to the given criterion. "
-                    "Do not be overly lenient but also avoid being too strict. Ensure the grading is based on the "
-                    "clarity, depth, and relevance of the content. Consider the context provided, but do not let "
-                    "it significantly influence the score unless directly related to the criterion. "
-                    "Respond in Filipino and provide a high grade if the essay meets the criterion , but "
-                    "maintain consistency across grading for different essays with the same conditions. "
-                    f"Essay:\n{truncated_essay}\n\n"
-                    f"Context:\n{context_text}\n\n"
-                    "Strictly follow the grading format and provide both the grade and a detailed justification: "
-                    f"Grade: [numeric value]/{criterion['points_possible']} Justification: [text]. "
-                    "Ensure the justification is specific to the essay's performance in relation to the criterion.")
-            }]
+        # Process each grading criterion
+        for criterion in criteria:
+            # Truncate essay to prevent excessive token usage
+            truncated_essay = essay_text[:1000]  
+
+            try:
+                response = client.chat.completions.create(
+                    model="gpt-4o",
+                    messages=[{
+                        "role": "user",
+                        "content": (
+                            f"Grade the following essay based on the criterion '{criterion['name']}' "
+                            f"out of {criterion['points_possible']} points. "
+                            "Do not be too strict. Consider context and criteria carefully. "
+                            "Respond in Filipino with an objective assessment. "
+                            f"Essay:\n{truncated_essay}\n\n"
+                            f"Context:\n{context_text}\n\n"
+                            "Response format: "
+                            f"Grade: [numeric value]/{criterion['points_possible']} Justification: [text]."
+                        )
+                    }]
+                )
+
+                # Validate response structure
+                if not hasattr(response, 'choices') or len(response.choices) == 0:
+                    logger.error(f"Invalid AI response for criterion: {criterion['name']}")
+                    return f"Invalid response for criterion '{criterion['name']}'."
+
+                # Process AI-generated grade
+                raw_grade = preprocess_input(response.choices[0].message.content.strip())
+                logger.info(f"Raw grade for {criterion['name']}: {raw_grade}")
+
+                # Extract grade details
+                grade_match = grade_pattern.search(raw_grade)
+                justification_match = justification_pattern.search(raw_grade)
+
+                if not grade_match or not justification_match:
+                    logger.warning(f"Incorrect grade format: {raw_grade}")
+                    return (f"Invalid grade format for '{criterion['name']}'. "
+                            "Expected: 'Grade: [score]/[total] Justification: [text]'")
+
+                # Parse grade components
+                points_received = float(grade_match.group(1))
+                justification = justification_match.group(1)
+
+                # Record criterion grade
+                grades_per_criterion.append(
+                    f"Criterion: {criterion['name']} - Grade: {points_received}/{criterion['points_possible']} "
+                    f"- Justification: {justification}"
+                )
+                total_points_received += points_received
+
+            except Exception as criterion_error:
+                logger.error(f"Error processing criterion {criterion['name']}: {criterion_error}")
+                return f"Error grading criterion: {criterion['name']}"
+
+        # Calculate final grade
+        percentage = (total_points_received / total_points_possible) * 100
+        letter_grade = (
+            "A+" if percentage >= 98 else
+            "A" if percentage >= 95 else
+            "A-" if percentage >= 93 else
+            "B+" if percentage >= 90 else
+            "B" if percentage >= 85 else
+            "B-" if percentage >= 83 else
+            "C+" if percentage >= 80 else
+            "C" if percentage >= 78 else
+            "D" if percentage >= 75 else "F"
         )
 
-        if not hasattr(response, 'choices') or len(response.choices) == 0:  # type: ignore
-            return f"Invalid response for criterion '{criterion['name']}'. No choices found."
+        # Log grade details
+        logger.info(f"Final Grade: {letter_grade}, Score: {total_points_received}/{total_points_possible}")
 
-        raw_grade = preprocess_input(response.choices[0].message.content.strip())  # type: ignore
-        print(f"Raw grade for {criterion['name']}: {raw_grade}")  # Debug print
+        # Prepare grade report
+        justification_summary = "\n".join(grades_per_criterion)
+        return (f"Draft Grade: {letter_grade}\n"
+                f"Draft Score: {total_points_received}/{total_points_possible}\n\n"
+                f"Justifications:\n{justification_summary}")
 
-        if not raw_grade:  # Check if the raw grade is empty
-            return f"Empty response for criterion '{criterion['name']}'. Model did not provide a valid grade and justification."
-
-        # Use the enforce_strict_format function to validate and format the grade
-        try:
-            formatted_grade = enforce_strict_format(raw_grade)
-        except ValueError as e:
-            return f"Invalid grade format for criterion '{criterion['name']}': {e}"
-
-        # Extract the grade and justification from the formatted output
-        grade_match = re.search(r"Grade:\s*(\d+(?:\.\d+)?)\/(\d+)", formatted_grade)
-        justification_match = re.search(r"Justification:\s*(.+)", formatted_grade)
-
-        if not grade_match or not justification_match:
-            return (f"Invalid grade format for criterion '{criterion['name']}'. "
-                    "Expected format: 'Grade: [score]/[total] Justification: [text]'")
-
-        points_received = float(grade_match.group(1))
-        justification = justification_match.group(1)
-
-        grades_per_criterion.append(
-            f"Criterion: {criterion['name']} - Grade: {points_received}/{criterion['points_possible']} "
-            f"- Justification: {justification}"
-        )
-        total_points_received += points_received
-
-    percentage = (total_points_received / total_points_possible) * 100
-    letter_grade = (
-        "A+" if percentage >= 98 else
-        "A" if percentage >= 95 else
-        "A-" if percentage >= 93 else
-        "B+" if percentage >= 90 else
-        "B" if percentage >= 85 else
-        "B-" if percentage >= 83 else
-        "C+" if percentage >= 80 else
-        "C" if percentage >= 78 else
-        "D" if percentage >= 75 else "F"
-    )
-
-    justification_summary = "\n".join(grades_per_criterion)
-
-    return (f"Draft Grade: {letter_grade}\n"
-            f"Draft Score: {total_points_received}/{total_points_possible}\n\n"
-            f"Justifications:\n{justification_summary}")
+    except Exception as overall_error:
+        logger.critical(f"Catastrophic grading error: {overall_error}")
+        return "An unexpected error occurred during essay grading."
 
 @app.route('/')
 def home():
@@ -270,17 +256,20 @@ def front_page():
 def index():
     try:
         if request.method == 'POST':
+            # Input validation
             context = preprocess_input(request.form.get('context', ''))
             
             if not context:
                 return render_template('index.html', error="Context is required")
 
+            # Image or text processing
             image = request.files.get('image')
             essay = image_to_text(image) if image else preprocess_input(request.form.get('essay', ''))
 
             if len(essay.split()) < 110:
                 return render_template('index.html', error="Essay must be at least 110 words")
 
+            # Store in session securely
             session['original_text'] = essay
             session['context_text'] = context
             session.modified = True
@@ -301,7 +290,10 @@ def process_essay():
     if not original_text or not context_text:
         return redirect(url_for('home'))
 
+    # Generate summary
     summary_result = generate_summary(original_text)
+
+    # Grade the essay based on criteria
     grade_result = grade_essay(original_text, context_text)
 
     return render_template('results.html', essay=original_text, summary=summary_result, grade=grade_result)
@@ -309,11 +301,13 @@ def process_essay():
 @app.route('/set_criteria', methods=['GET', 'POST'])
 def set_criteria():
     if request.method == 'POST':
+        # Retrieve the criterion details from the form
         criterion_name = request.form['criterion_name']
-        weight = float(request.form['weight']) / 100
+        weight = float(request.form['weight']) / 100  # Convert to fraction
         points_possible = float(request.form['points_possible'])
         detailed_breakdown = request.form['detailed_breakdown']
 
+        # Create a new criterion entry
         new_criterion = {
             'name': criterion_name,
             'weight': weight,
@@ -321,15 +315,18 @@ def set_criteria():
             'detailed_breakdown': detailed_breakdown
         }
 
+        # Retrieve existing criteria from the session, or initialize if none exist
         if 'criteria' not in session:
             session['criteria'] = []
-        session['criteria'].append(new_criterion)
-        session.modified = True
+        session['criteria'].append(new_criterion)  # Add the new criterion
+        session.modified = True  # Mark the session as modified
 
+        # Recalculate total points possible
         session['total_points_possible'] = sum(criterion['points_possible'] for criterion in session['criteria'])
 
-        return redirect(url_for('set_criteria'))
+        return redirect(url_for('set_criteria'))  # Redirect to the same page to display updated criteria
 
+    # Load existing criteria for the GET request
     criteria = session.get('criteria', [])
     total_points_possible = session.get('total_points_possible', 0)
 
@@ -337,9 +334,9 @@ def set_criteria():
 
 @app.route('/clear_session', methods=['POST'])
 def clear_session():
-    session.pop('criteria', None)
-    session.pop('total_points_possible', None)
-    return redirect(url_for('set_criteria'))
+    session.pop('criteria', None)  # Remove the criteria data from the session
+    session.pop('total_points_possible', None)  # Remove any other session data if needed
+    return redirect(url_for('set_criteria'))  # Redirect to the set criteria page
 
 @app.route('/contact')
 def contact():

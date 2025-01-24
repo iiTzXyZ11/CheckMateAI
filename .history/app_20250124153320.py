@@ -189,19 +189,24 @@ def grade_essay(essay_text, context_text):
             model="gpt-4o",
             messages=[{
                 "role": "user",
-                "content": (f"Grade the following essay based on the criterion '{criterion['name']}' out of "
-                    f"{criterion['points_possible']} points. Please be consistent and fair in your grading, "
-                    "focusing on the specific aspects of the essay that correspond to the given criterion. "
-                    "Do not be overly lenient but also avoid being too strict. Ensure the grading is based on the "
-                    "clarity, depth, and relevance of the content. Consider the context provided, but do not let "
-                    "it significantly influence the score unless directly related to the criterion. "
-                    "Respond in Filipino and provide a high grade if the essay meets the criterion , but "
-                    "maintain consistency across grading for different essays with the same conditions. "
+                "content": (
+                    f"Grade the following essay based on the criterion '{criterion['name']}' out of {criterion['points_possible']} points. "
+                    "Please follow the grading rubric closely and grade the essay according to the following strict benchmarks:\n"
+                    "1. A+ (Excellent): Given for responses that exceed expectations with outstanding depth and clarity.\n"
+                    "2. A (Very Good): Given for responses that are well-rounded but could be more detailed or polished in some areas.\n"
+                    "3. A- (Good): Given for responses that are solid but have significant areas that need improvement, such as missing key details or depth.\n"
+                    "4. B+ (Above Average): Given for responses that are mostly good but still lack refinement or depth in some aspects.\n"
+                    "5. B (Average): Given for responses that are adequate but missing significant analysis or are somewhat unclear.\n"
+                    "6. B- (Below Average): Given for responses that fail to demonstrate a clear understanding of key points, with several weaknesses.\n"
+                    "7. C+ (Satisfactory): Given for responses that address the basic requirements but are underdeveloped or lack substance.\n"
+                    "8. C (Fair): Given for responses that are very basic or fail to provide adequate explanations or examples.\n"
+                    "9. D (Poor): Given for responses that fail to address the key points or are lacking in major areas.\n"
+                    "10. F (Fail): Given for responses that are irrelevant, incomplete, or do not meet the minimal requirements.\n"
+                    "Use numerical grading (e.g., 90/100) instead of alphabetical grades. Provide your grade based on these parameters and then give a justification for your grade in Filipino. "
                     f"Essay:\n{truncated_essay}\n\n"
                     f"Context:\n{context_text}\n\n"
-                    "Strictly follow the grading format and provide both the grade and a detailed justification: "
-                    f"Grade: [numeric value]/{criterion['points_possible']} Justification: [text]. "
-                    "Ensure the justification is specific to the essay's performance in relation to the criterion.")
+                    "Strictly format your response as follows: "
+                    f"Grade: [numeric value]/{criterion['points_possible']} Justification: [text].")
             }]
         )
 
