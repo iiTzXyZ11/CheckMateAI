@@ -59,7 +59,7 @@ app, limiter = create_app()
 try:
     client = Client()
     image_to_text_client = Client(
-        api_key="YOUR_API_KEY",
+        api_key="AIzaSyCX13POLxDWzFWzOfZr7rn3vjG0eNUXlfk",
         provider=GeminiPro
     )
     
@@ -202,8 +202,9 @@ def grade_essay(essay_text, context_text):
                     "Strictly follow the grading format and provide both the grade and a detailed justification: "
                     f"Grade: [numeric value]/{criterion['points_possible']} Justification: [text]. "
                     "Ensure the justification is specific to the essay's performance in relation to the criterion.")
-            }])
-        
+            }]
+        )
+
         if not hasattr(response, 'choices') or len(response.choices) == 0:  # type: ignore
             return f"Invalid response for criterion '{criterion['name']}'. No choices found."
 
