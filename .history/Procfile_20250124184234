@@ -1,0 +1,4 @@
+
+web: gunicorn --timeout 360 app:app --workers 2  # Increase timeout to 120 seconds
+release: pip install --upgrade pip  
+
