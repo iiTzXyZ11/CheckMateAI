@@ -167,7 +167,7 @@ def enforce_strict_format(raw_grade):
     return f"Grade: {score}/{total} Justification: {justification}"
 
 def grade_essay(essay_text, context_text):
-    # Early validation checks
+    # Check essay length early
     if len(essay_text.split()) < 110:
         return "Error: Ang input na teksto ay dapat magkaroon ng hindi bababa sa 110 salita."
 
@@ -179,20 +179,16 @@ def grade_essay(essay_text, context_text):
     if total_points_possible == 0:
         return "No valid criteria to grade the essay."
 
-    # Implement a timeout mechanism
     total_points_received = 0
     grades_per_criterion = []
 
     for criterion in criteria:
-        # Limit essay length for context
-        truncated_essay = essay_text[:1000]  
+        truncated_essay = essay_text[:1000]  # Limit essay length for context
 
-        try:
-            # Add a timeout parameter to the API call
-            response = client.chat.completions.create(
-                model="gpt-4o",
-                timeout=30,  # 45-second timeout
-                messages=[{
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            timeout=45,
+            messages=[{
                 "role": "user",
                 "content": (f"Grade the following essay based on the criterion '{criterion['name']}' out of "
                     f"{criterion['points_possible']} points. Please be consistent and fair in your grading, "
@@ -207,49 +203,48 @@ def grade_essay(essay_text, context_text):
                     "Strictly follow the grading format and provide both the grade and a detailed justification: "
                     f"Grade: [numeric value]/{criterion['points_possible']} Justification: [text]. "
                     "Ensure the justification is specific to the essay's performance in relation to the criterion.")
-                }]
-            )
+                    except TimeoutError:
+        # Log and handle timeout
+        return {"error": "Grading process timed out"}
+    except Exception as e:
+        # Handle other potential errors
+        return {"error": str(e)}
+            }])
+        
+        
 
-            # Immediate validation of response
-            if not hasattr(response, 'choices') or len(response.choices) == 0:
-                logger.warning(f"No valid response for criterion: {criterion['name']}")
-                return f"Invalid response for criterion '{criterion['name']}'. No choices found."
+        if not hasattr(response, 'choices') or len(response.choices) == 0:  # type: ignore
+            return f"Invalid response for criterion '{criterion['name']}'. No choices found."
 
-            # Extract and process the raw grade
-            raw_grade = preprocess_input(response.choices[0].message.content.strip())
-            
-            if not raw_grade:
-                logger.warning(f"Empty response for criterion: {criterion['name']}")
-                return f"Empty response for criterion '{criterion['name']}'."
+        raw_grade = preprocess_input(response.choices[0].message.content.strip())  # type: ignore
+        print(f"Raw grade for {criterion['name']}: {raw_grade}")  # Debug print
 
-            # Validate and format the grade
+        if not raw_grade:  # Check if the raw grade is empty
+            return f"Empty response for criterion '{criterion['name']}'. Model did not provide a valid grade and justification."
+
+        # Use the enforce_strict_format function to validate and format the grade
+        try:
             formatted_grade = enforce_strict_format(raw_grade)
+        except ValueError as e:
+            return f"Invalid grade format for criterion '{criterion['name']}': {e}"
 
-            # Extract numeric grade
-            grade_match = re.search(r"Grade:\s*(\d+(?:\.\d+)?)\/(\d+)", formatted_grade)
-            justification_match = re.search(r"Justification:\s*(.+)", formatted_grade)
+        # Extract the grade and justification from the formatted output
+        grade_match = re.search(r"Grade:\s*(\d+(?:\.\d+)?)\/(\d+)", formatted_grade)
+        justification_match = re.search(r"Justification:\s*(.+)", formatted_grade)
 
-            if not grade_match or not justification_match:
-                logger.warning(f"Invalid grade format for criterion: {criterion['name']}")
-                return (f"Invalid grade format for criterion '{criterion['name']}'. "
-                        "Expected format: 'Grade: [score]/[total] Justification: [text]'")
+        if not grade_match or not justification_match:
+            return (f"Invalid grade format for criterion '{criterion['name']}'. "
+                    "Expected format: 'Grade: [score]/[total] Justification: [text]'")
 
-            points_received = float(grade_match.group(1))
-            justification = justification_match.group(1)
+        points_received = float(grade_match.group(1))
+        justification = justification_match.group(1)
 
-            # Log and store the grade
-            grades_per_criterion.append(
-                f"Criterion: {criterion['name']} - Grade: {points_received}/{criterion['points_possible']} "
-                f"- Justification: {justification}"
-            )
-            total_points_received += points_received
+        grades_per_criterion.append(
+            f"Criterion: {criterion['name']} - Grade: {points_received}/{criterion['points_possible']} "
+            f"- Justification: {justification}"
+        )
+        total_points_received += points_received
 
-        except Exception as e:
-            # Comprehensive error handling
-            logger.error(f"Grading error for criterion {criterion['name']}: {str(e)}")
-            return f"An error occurred while grading the criterion '{criterion['name']}': {str(e)}"
-
-    # Calculate final grade
     percentage = (total_points_received / total_points_possible) * 100
     letter_grade = (
         "A+" if percentage >= 98 else

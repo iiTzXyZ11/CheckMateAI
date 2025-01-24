@@ -191,7 +191,7 @@ def grade_essay(essay_text, context_text):
             # Add a timeout parameter to the API call
             response = client.chat.completions.create(
                 model="gpt-4o",
-                timeout=30,  # 45-second timeout
+                timeout=45,  # 45-second timeout
                 messages=[{
                 "role": "user",
                 "content": (f"Grade the following essay based on the criterion '{criterion['name']}' out of "

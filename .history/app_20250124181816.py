@@ -167,7 +167,7 @@ def enforce_strict_format(raw_grade):
     return f"Grade: {score}/{total} Justification: {justification}"
 
 def grade_essay(essay_text, context_text):
-    # Early validation checks
+    # Check essay length early
     if len(essay_text.split()) < 110:
         return "Error: Ang input na teksto ay dapat magkaroon ng hindi bababa sa 110 salita."
 
@@ -179,20 +179,17 @@ def grade_essay(essay_text, context_text):
     if total_points_possible == 0:
         return "No valid criteria to grade the essay."
 
-    # Implement a timeout mechanism
     total_points_received = 0
     grades_per_criterion = []
 
     for criterion in criteria:
-        # Limit essay length for context
-        truncated_essay = essay_text[:1000]  
+        truncated_essay = essay_text[:1000]  # Limit essay length for context
 
-        try:
-            # Add a timeout parameter to the API call
-            response = client.chat.completions.create(
-                model="gpt-4o",
-                timeout=30,  # 45-second timeout
-                messages=[{
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            timeout=45,
+            
+            messages=[{
                 "role": "user",
                 "content": (f"Grade the following essay based on the criterion '{criterion['name']}' out of "
                     f"{criterion['points_possible']} points. Please be consistent and fair in your grading, "
@@ -207,8 +204,7 @@ def grade_essay(essay_text, context_text):
                     "Strictly follow the grading format and provide both the grade and a detailed justification: "
                     f"Grade: [numeric value]/{criterion['points_possible']} Justification: [text]. "
                     "Ensure the justification is specific to the essay's performance in relation to the criterion.")
-                }]
-            )
+            }])
 
             # Immediate validation of response
             if not hasattr(response, 'choices') or len(response.choices) == 0:

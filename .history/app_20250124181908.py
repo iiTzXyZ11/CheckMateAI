@@ -191,22 +191,31 @@ def grade_essay(essay_text, context_text):
             # Add a timeout parameter to the API call
             response = client.chat.completions.create(
                 model="gpt-4o",
-                timeout=30,  # 45-second timeout
+                timeout=45,  # 45-second timeout
                 messages=[{
-                "role": "user",
-                "content": (f"Grade the following essay based on the criterion '{criterion['name']}' out of "
-                    f"{criterion['points_possible']} points. Please be consistent and fair in your grading, "
-                    "focusing on the specific aspects of the essay that correspond to the given criterion. "
-                    "Do not be overly lenient but also avoid being too strict. Ensure the grading is based on the "
-                    "clarity, depth, and relevance of the content. Consider the context provided, but do not let "
-                    "it significantly influence the score unless directly related to the criterion. "
-                    "Respond in Filipino and provide a high grade if the essay meets the criterion , but "
-                    "maintain consistency across grading for different essays with the same conditions. "
-                    f"Essay:\n{truncated_essay}\n\n"
-                    f"Context:\n{context_text}\n\n"
-                    "Strictly follow the grading format and provide both the grade and a detailed justification: "
-                    f"Grade: [numeric value]/{criterion['points_possible']} Justification: [text]. "
-                    "Ensure the justification is specific to the essay's performance in relation to the criterion.")
+                    "role": "system",
+                    "content": "You are a consistent and fair academic grader. Provide objective, precise evaluations."
+                },
+                {
+                    "role": "user", 
+                    "content": (
+                        f"Grading Task: Evaluate an essay for the '{criterion['name']}' criterion\n\n"
+                        "Grading Protocol:\n"
+                        f"1. Evaluation Scale (Total Points: {criterion['points_possible']}):\n"
+                        "   - 0-25%: Insufficient understanding\n"
+                        "   - 26-50%: Basic comprehension with significant gaps\n"
+                        "   - 51-75%: Solid performance with minor improvements needed\n"
+                        "   - 76-100%: Exceptional, comprehensive demonstration\n\n"
+                        "2. Assessment Guidelines:\n"
+                        "   - Rate ONLY the specific criterion\n"
+                        "   - Use entire point range objectively\n"
+                        "   - Base score solely on essay's intrinsic qualities\n\n"
+                        f"Essay:\n{truncated_essay}\n\n"
+                        f"Context:\n{context_text}\n\n"
+                        "Submission Format:\n"
+                        f"Grade: [0-{criterion['points_possible']}] "
+                        "Justification: [Detailed, criterion-specific analysis]"
+                    )
                 }]
             )
 

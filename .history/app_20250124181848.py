@@ -189,10 +189,11 @@ def grade_essay(essay_text, context_text):
 
         try:
             # Add a timeout parameter to the API call
-            response = client.chat.completions.create(
-                model="gpt-4o",
-                timeout=30,  # 45-second timeout
-                messages=[{
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            timeout=45,
+            
+            messages=[{
                 "role": "user",
                 "content": (f"Grade the following essay based on the criterion '{criterion['name']}' out of "
                     f"{criterion['points_possible']} points. Please be consistent and fair in your grading, "
@@ -207,8 +208,7 @@ def grade_essay(essay_text, context_text):
                     "Strictly follow the grading format and provide both the grade and a detailed justification: "
                     f"Grade: [numeric value]/{criterion['points_possible']} Justification: [text]. "
                     "Ensure the justification is specific to the essay's performance in relation to the criterion.")
-                }]
-            )
+            }])
 
             # Immediate validation of response
             if not hasattr(response, 'choices') or len(response.choices) == 0:
