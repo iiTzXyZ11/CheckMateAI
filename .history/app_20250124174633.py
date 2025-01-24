@@ -202,8 +202,9 @@ def grade_essay(essay_text, context_text):
                     "Strictly follow the grading format and provide both the grade and a detailed justification: "
                     f"Grade: [numeric value]/{criterion['points_possible']} Justification: [text]. "
                     "Ensure the justification is specific to the essay's performance in relation to the criterion.")
-            }])
-        
+            }]
+        )
+
         if not hasattr(response, 'choices') or len(response.choices) == 0:  # type: ignore
             return f"Invalid response for criterion '{criterion['name']}'. No choices found."
 
@@ -320,19 +321,33 @@ def set_criteria():
             'detailed_breakdown': detailed_breakdown
         }
 
-        criteria = session.get('criteria', [])
-        criteria.append(new_criterion)
-        session['criteria'] = criteria
+        if 'criteria' not in session:
+            session['criteria'] = []
+        session['criteria'].append(new_criterion)
         session.modified = True
+
+        session['total_points_possible'] = sum(criterion['points_possible'] for criterion in session['criteria'])
 
         return redirect(url_for('set_criteria'))
 
-    return render_template('set_criteria.html')
+    criteria = session.get('criteria', [])
+    total_points_possible = session.get('total_points_possible', 0)
 
-@app.route('/reset')
-def reset():
-    session.clear()
-    return redirect(url_for('front_page'))
+    return render_template('set_criteria.html', criteria=criteria, total_points_possible=total_points_possible)
+
+@app.route('/clear_session', methods=['POST'])
+def clear_session():
+    session.pop('criteria', None)
+    session.pop('total_points_possible', None)
+    return redirect(url_for('set_criteria'))
+
+@app.route('/contact')
+def contact():
+    return redirect("https://www.facebook.com/profile.php?id=61571739043757")
+
+@app.route('/how-to-use', methods=['GET'])
+def how_to_use():
+    return render_template('how_to_use.html')
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(host='0.0.0.0', port=5000)
