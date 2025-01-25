@@ -45,6 +45,7 @@ class EssayGradingApp:
         )
 
     def _setup_extensions(self):
+        
         # Add rate limiting
         self.limiter = Limiter(
             get_remote_address,
@@ -165,6 +166,7 @@ class EssayGradingApp:
             
             session['criteria'].append(new_criterion)
             
+
             session['total_points_possible'] = sum(
                 criterion['points_possible'] for criterion in session['criteria']
             )
@@ -296,7 +298,30 @@ class EssayGradingApp:
             "D" if percentage >= 75 else "F"
         )
 
-        return f"Grade: {total_points_received}/{total_points_possible} ({letter_grade})\n" + "\n".join(grades_per_criterion)
+        justification_summary = "\n".join(grades_per_criterion)
+
+        return (
+            f"Draft Grade: {letter_grade}\n"
+            f"Draft Score: {total_points_received}/{total_points_possible}\n\n"
+            f"Justifications:\n{justification_summary}"
+        )
+
+    def run(self, debug: bool = False):
+        """Run the Flask application."""
+        try:
+            self.app.run(
+                host='0.0.0.0',
+                port=5000,
+                debug=debug
+            )
+        except Exception as e:
+            logger.critical(f"Application startup failed: {e}")
+            raise
 
 def create_app():
-    return EssayGradingApp().app
+    """Factory function to create and configure the Flask app."""
+    essay_app = EssayGradingApp()
+    return essay_app.app
+
+if __name__ == '__main__':
+    app = create_app()
