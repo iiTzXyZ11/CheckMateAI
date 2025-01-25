@@ -165,7 +165,7 @@ class EssayGradingApp:
                 session['criteria'] = []
             
             session['criteria'].append(new_criterion)
-            
+            session.modified = True
 
             session['total_points_possible'] = sum(
                 criterion['points_possible'] for criterion in session['criteria']
@@ -325,3 +325,4 @@ def create_app():
 
 if __name__ == '__main__':
     app = create_app()
+    app.run(debug=True)
