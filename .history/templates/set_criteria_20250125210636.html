@@ -20,7 +20,7 @@
                 <img src="{{ url_for('static', filename='css/images/contact.png') }}" class="contact-icon" alt="Contact Icon">
                 Contact Us
             </a>
-            <a href="https://www.youtube.com/watch?v=Ia6pL32Ip8I&ab_channel=CheckMateAI" 
+            <a href="https://www.youtube.com/watch?v=Oh9f3SV6xh8&list=RDOh9f3SV6xh8&start_radio=1" 
             target="_blank" 
             rel="noopener noreferrer" 
             class="header-link">
@@ -33,6 +33,7 @@
     <div class="criteria-container">
         <div class="form-container">
             <form action="/set_criteria" method="POST">
+                {{ csrf_token() }}
                 <div class="criterion-grid">
                     <label for="criterion_name">Criterion Name:</label>
                     <input type="text" id="criterion_name" name="criterion_name" required><br><br>
@@ -73,6 +74,7 @@
                 </table>
                 <h3>Total Points Possible: {{ total_points_possible }}</h3>
                 <form action="/clear_session" method="POST">
+                    {{ csrf_token() }}
                     <button type="submit">Reset Criteria</button>
                 </form>                
             {% endif %}

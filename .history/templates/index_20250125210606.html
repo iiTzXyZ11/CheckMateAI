@@ -22,7 +22,7 @@
                     <img src="{{ url_for('static', filename='css/images/contact.png') }}" class="contact-icon" alt="Contact Icon">
                     Contact Us
                 </a>
-                <a href="https://www.youtube.com/watch?v=Ia6pL32Ip8I&ab_channel=CheckMateAI" 
+                <a href="https://www.youtube.com/watch?v=Oh9f3SV6xh8&list=RDOh9f3SV6xh8&start_radio=1" 
                 target="_blank" 
                 rel="noopener noreferrer" 
                 class="header-link">
@@ -39,6 +39,7 @@
                 <div class="box">
                     <h2>Student Output:</h2>
                     <form action="{{ url_for('index') }}" method="POST" enctype="multipart/form-data">
+                        {{ csrf_token() }}
                         <p>Enter the student's work below (you can either type the essay or upload an image):</p>
                         <textarea name="essay" placeholder="Enter your essay here (optional)"></textarea>
                         <p>Or upload an image of the handwritten work:</p>
