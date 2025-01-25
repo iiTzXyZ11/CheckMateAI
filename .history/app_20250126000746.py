@@ -57,82 +57,85 @@ def generate_summary(text):
         return f"An error occurred during summarization: {str(e)}"
 
 # Grade essay function
-def grade_essay(essay_text, context_text):
-    # Check essay length once, early return if too short
-    if len(essay_text.split()) < 150:
-        return "Error: Ang input na teksto ay dapat magkaroon ng hindi bababa sa 150 salita."
+   def grade_essay(self, essay_text: str, context_text: str) -> str:
+        """Grade essay with comprehensive error handling."""
+        if len(essay_text.split()) < 150:
+            return "Error: Ang input na teksto ay dapat magkaroon ng hindi bababa sa 150 salita."
 
-    # Retrieve criteria and total points
-    criteria = session.get('criteria', [])
-    if not criteria:
-        return "No criteria set for grading."
+        criteria = session.get('criteria', [])
+        if not criteria:
+            return "No criteria set for grading."
 
-    total_points_possible = session.get('total_points_possible', 0)
-    if total_points_possible == 0:
-        return "No valid criteria to grade the essay."
+        total_points_possible = session.get('total_points_possible', 0)
+        if total_points_possible == 0:
+            return "No valid criteria to grade the essay."
 
-    total_points_received = 0
-    justifications = {}
+        total_points_received = 0
+        grades_per_criterion = []
+        
+        grade_pattern = re.compile(r"Grade:\s*(\d+(\.\d+)?)\/(\d+)")
+        justification_pattern = re.compile(r"Justification:\s*(.*)")
 
-    # Collect grades per criterion
-    grades_per_criterion = []
-    
-    # Compile the regular expression pattern for grade and justification extraction
-    grade_pattern = re.compile(r"Grade:\s*(\d+(\.\d+)?)\/(\d+)")
-    justification_pattern = re.compile(r"Justification:\s*(.*)")
+        for criterion in criteria:
+            truncated_essay = essay_text[:1000]
 
-    for criterion in criteria:
-        truncated_essay = essay_text[:1000]  # Limit essay length for context
+            try:
+                response = self.text_client.chat.completions.create(
+                    model="gpt-4o",
+                    messages=[{
+                        "role": "user",
+                        "content": (f"Grade the following essay based on the criterion '{criterion['name']}' out of "
+                            f"{criterion['points_possible']} points. Please be consistent and fair in your grading, "
+                            "focusing on the specific aspects of the essay that correspond to the given criterion. "
+                            "Do not be overly lenient but also avoid being strict. Ensure the grading is based on the "
+                            "clarity, depth, and relevance of the content. Consider the context and parameters provided, "
+                            "Respond in Filipino and provide a high grade if the essay meets the criterion , but "
+                            "maintain consistency across grading for different essays with the same conditions. "
+                            f"Essay:\n{truncated_essay}\n\n"
+                            f"Context:\n{context_text}\n\n"
+                            "follow the grading format and provide both the grade and a detailed justification: "
+                            f"Grade: [numeric value]/{criterion['points_possible']} Justification: [text]. "
+                            "Ensure the justification is specific to the essay's performance in relation to the criterion.")
+                    }])
+                )
 
-        # Modify the prompt for grading
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[{
-                "role": "user",
-                "content": (f"Grade the following essay based on the criterion '{criterion['name']}' out of "
-                    f"{criterion['points_possible']} points. Please be consistent and fair in your grading, "
-                    "focusing on the specific aspects of the essay that correspond to the given criterion. "
-                    "Do not be overly lenient but also avoid being strict. Ensure the grading is based on the "
-                    "clarity, depth, and relevance of the content. Consider the context and parameters provided, "
-                    "Respond in Filipino and provide a high grade if the essay meets the criterion , but "
-                    "maintain consistency across grading for different essays with the same conditions. "
-                    f"Essay:\n{truncated_essay}\n\n"
-                    f"Context:\n{context_text}\n\n"
-                    "follow the grading format and provide both the grade and a detailed justification: "
-                    f"Grade: [numeric value]/{criterion['points_possible']} Justification: [text]. "
-                    "Ensure the justification is specific to the essay's performance in relation to the criterion.")
-            }]
+                if not hasattr(response, 'choices') or len(response.choices) == 0:
+                    return f"Invalid response for criterion '{criterion['name']}'."
+
+                raw_grade = response.choices[0].message.content.strip()
+
+                grade_match = grade_pattern.search(raw_grade)
+                justification_match = justification_pattern.search(raw_grade)
+
+                points_received = float(grade_match.group(1)) if grade_match else 0
+                justification = justification_match.group(1) if justification_match else "No justification"
+
+                total_points_received += points_received
+                grades_per_criterion.append(
+                    f"Criterion: {criterion['name']} - "
+                    f"Grade: {points_received}/{criterion['points_possible']} - "
+                    f"Justification: {justification}"
+                )
+
+            except Exception as e:
+                logger.error(f"Grading error for {criterion['name']}: {e}")
+                return f"Error grading criterion: {criterion['name']}"
+
+        # Calculate percentage and letter grade
+        percentage = (total_points_received / total_points_possible) * 100
+        letter_grade = (
+            "A+" if percentage >= 98 else
+            "A" if percentage >= 95 else
+            "A-" if percentage >= 93 else
+            "B+" if percentage >= 90 else
+            "B" if percentage >= 85 else
+            "B-" if percentage >= 83 else
+            "C+" if percentage >= 80 else
+            "C" if percentage >= 78 else
+            "D" if percentage >= 75 else "F"
         )
 
-        # Validate response
-        if not hasattr(response, 'choices') or len(response.choices) == 0:  # type: ignore
-            return f"Invalid response received for criterion '{criterion['name']}'. No choices were found."
-
-        raw_grade = response.choices[0].message.content.strip()  # type: ignore
-        print(f"Raw grade for {criterion['name']}: {raw_grade}")  # Debug print
-
-        # Extract grade and justification using regex
-        grade_match = grade_pattern.search(raw_grade)
-        justification_match = justification_pattern.search(raw_grade)
-
-        # If no grade is found, default to 0 points
-        if not grade_match:
-            points_received = 0
-        else:
-            points_received = float(grade_match.group(1))
-
-        # If no justification is found, provide a default message
-        if not justification_match:
-            justification = "No justification provided."
-        else:
-            justification = justification_match.group(1)
-
-        # Save the grade and justification
-        justifications[criterion['name']] = justification
-        total_points_received += points_received
-
-        # Save the grade per criterion
-        grades_per_criterion.append(f"Criterion: {criterion['name']} - Grade: {points_received}/{criterion['points_possible']} - Justification: {justification}")
+        return f"Grade: {total_points_received}/{total_points_possible} ({letter_grade})\n" + "\n".join(grades_per_criterion)
 
     # Calculate total percentage and letter grade
     percentage = (total_points_received / total_points_possible) * 100
@@ -196,20 +199,7 @@ def index():
 
     return render_template('index.html')  # Render the scanning page
 
-from concurrent.futures import ThreadPoolExecutor
-
-def process_essay_parallel(essay_text, context_text):
-    with ThreadPoolExecutor(max_workers=2) as executor:
-        summary_future = executor.submit(generate_summary, essay_text)
-        grade_future = executor.submit(grade_essay, essay_text, context_text)
-        
-        summary = summary_future.result()
-        grade = grade_future.result()
-        
-    return summary, grade
-
-# Replace the existing process_essay route with this
-@app.route('/process_essay', methods=['GET', 'POST'])
+@app.route('/process_essay', methods=['GET', 'POST'])  # Define the route for processing the essay
 def process_essay():
     original_text = session.get('original_text', '')
     context_text = session.get('context_text', '')
@@ -217,8 +207,11 @@ def process_essay():
     if not original_text or not context_text:
         return redirect(url_for('home'))
 
-    # Use parallel processing
-    summary_result, grade_result = process_essay_parallel(original_text, context_text)
+    # Generate summary
+    summary_result = generate_summary(original_text)
+
+    # Grade the essay based on criteria
+    grade_result = grade_essay(original_text, context_text)
 
     return render_template('results.html', essay=original_text, summary=summary_result, grade=grade_result)
 
