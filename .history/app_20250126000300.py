@@ -246,9 +246,8 @@ class EssayGradingApp:
                             "follow the grading format and provide both the grade and a detailed justification: "
                             f"Grade: [numeric value]/{criterion['points_possible']} Justification: [text]. "
                             "Ensure the justification is specific to the essay's performance in relation to the criterion.")
-                    }]
+                    }])
                 )
-                
 
                 if not hasattr(response, 'choices') or len(response.choices) == 0:
                     return f"Invalid response for criterion '{criterion['name']}'."
