@@ -5,6 +5,7 @@ from typing import Optional, Dict, Any, List
 
 import flask
 from flask import Flask, render_template, redirect, url_for, request, session
+from flask_wtf import CSRFProtect
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 
@@ -45,6 +46,8 @@ class EssayGradingApp:
         )
 
     def _setup_extensions(self):
+        # Add CSRF protection
+        CSRFProtect(self.app)
         
         # Add rate limiting
         self.limiter = Limiter(
@@ -247,18 +250,14 @@ class EssayGradingApp:
                     model="gpt-4o",
                     messages=[{
                         "role": "user",
-                        "content": (f"Grade the following essay based on the criterion '{criterion['name']}' out of "
-                            f"{criterion['points_possible']} points. Please be consistent and fair in your grading, "
-                            "focusing on the specific aspects of the essay that correspond to the given criterion. "
-                            "Do not be overly lenient but also avoid being strict. Ensure the grading is based on the "
-                            "clarity, depth, and relevance of the content. Consider the context and parameters provided, "
-                            "Respond in Filipino and provide a high grade if the essay meets the criterion , but "
-                            "maintain consistency across grading for different essays with the same conditions. "
+                        "content": (
+                            f"Grade the essay based on '{criterion['name']}' "
+                            f"out of {criterion['points_possible']} points. "
+                            "Provide objective, fair grading with specific justification. "
                             f"Essay:\n{truncated_essay}\n\n"
                             f"Context:\n{context_text}\n\n"
-                            "follow the grading format and provide both the grade and a detailed justification: "
-                            f"Grade: [numeric value]/{criterion['points_possible']} Justification: [text]. "
-                            "Ensure the justification is specific to the essay's performance in relation to the criterion.")
+                            "Format: Grade: [numeric value]/[max points] Justification: [text]"
+                        )
                     }]
                 )
 
@@ -323,6 +322,113 @@ def create_app():
     essay_app = EssayGradingApp()
     return essay_app.app
 
+@app.route('/')  # Define the root URL route
+def home():
+    print("Home route accessed")  # Debug print
+    return redirect(url_for('front_page'))  # Redirect to the front page
+
+@app.route('/front')  # Front page route
+def front_page():
+    print("Front page accessed")  # Debug print
+    return render_template('front_page.html')
+
+@app.route('/scan', methods=['GET', 'POST'])  # Define the scanning route
+def index():
+    if request.method == 'POST':
+        context = request.form['context']  # Get context text from the form
+        session['context_text'] = context  # Store the context text in the session
+
+        # Check for image upload
+        image = request.files.get('image')  # Get the uploaded image
+        if image:  # If an image was uploaded
+            essay = image_to_text(image)  # Convert the image to text
+            if "Error" in essay:  # Check if there was an error during processing
+                return render_template('index.html', error=essay)
+        else:
+            essay = request.form['essay']  # If no image, get the text from the textarea
+
+        # Store the original text in the session
+        session['original_text'] = essay  
+
+        # Check if the essay has at least 150 words
+        if len(essay.split()) < 150:
+            return render_template('index.html', essay=essay,
+                                    error="Error: Ang input na teksto ay dapat magkaroon ng hindi bababa sa 150 salita.")
+
+        if not context.strip():  # Check if context is empty or just whitespace
+            return render_template('index.html', essay=essay,
+                                    error="Error: Please provide context for grading.")
+
+        return redirect(url_for('set_criteria'))  # Redirect to set_criteria
+
+    return render_template('index.html')  # Render the scanning page
+
+@app.route('/process_essay', methods=['GET', 'POST'])  # Define the route for processing the essay
+def process_essay():
+    original_text = session.get('original_text', '')
+    context_text = session.get('context_text', '')
+
+    if not original_text or not context_text:
+        return redirect(url_for('home'))
+
+    # Generate summary
+    summary_result = generate_summary(original_text)
+
+    # Grade the essay based on criteria
+    grade_result = grade_essay(original_text, context_text)
+
+    return render_template('results.html', essay=original_text, summary=summary_result, grade=grade_result)
+
+@app.route('/set_criteria', methods=['GET', 'POST'])
+def set_criteria():
+    if request.method == 'POST':
+        # Retrieve the criterion details from the form
+        criterion_name = request.form['criterion_name']
+        weight = float(request.form['weight']) / 100  # Convert to fraction
+        points_possible = float(request.form['points_possible'])
+        detailed_breakdown = request.form['detailed_breakdown']
+
+        # Create a new criterion entry
+        new_criterion = {
+            'name': criterion_name,
+            'weight': weight,
+            'points_possible': points_possible,
+            'detailed_breakdown': detailed_breakdown
+        }
+
+        # Retrieve existing criteria from the session, or initialize if none exist
+        if 'criteria' not in session:
+            session['criteria'] = []
+        session['criteria'].append(new_criterion)  # Add the new criterion
+        session.modified = True  # Mark the session as modified
+
+        # Recalculate total points possible
+        session['total_points_possible'] = sum(criterion['points_possible'] for criterion in session['criteria'])
+
+        return redirect(url_for('set_criteria'))  # Redirect to the same page to display updated criteria
+
+    # Load existing criteria for the GET request
+    criteria = session.get('criteria', [])
+    total_points_possible = session.get('total_points_possible', 0)
+
+    return render_template('set_criteria.html', criteria=criteria, total_points_possible=total_points_possible)
+
+@app.route('/clear_session', methods=['POST'])
+def clear_session():
+    session.pop('criteria', None)  # Remove the criteria data from the session
+    session.pop('total_points_possible', None)  # Remove any other session data if needed
+    return redirect(url_for('set_criteria'))  # Redirect to the set criteria page
+
+
+# New route for 'Contact Us'
+@app.route('/contact')  # Define the contact route
+def contact():
+    return redirect("https://www.facebook.com/profile.php?id=61567870400304")  # Replace with your actual Facebook page URL
+
+# New route for 'How to Use'
+@app.route('/how-to-use', methods=['GET'])
+def how_to_use():
+    return render_template('how_to_use.html')
+
 if __name__ == '__main__':
-    app = create_app()
     app.run(debug=True)

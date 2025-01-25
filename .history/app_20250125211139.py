@@ -247,18 +247,14 @@ class EssayGradingApp:
                     model="gpt-4o",
                     messages=[{
                         "role": "user",
-                        "content": (f"Grade the following essay based on the criterion '{criterion['name']}' out of "
-                            f"{criterion['points_possible']} points. Please be consistent and fair in your grading, "
-                            "focusing on the specific aspects of the essay that correspond to the given criterion. "
-                            "Do not be overly lenient but also avoid being strict. Ensure the grading is based on the "
-                            "clarity, depth, and relevance of the content. Consider the context and parameters provided, "
-                            "Respond in Filipino and provide a high grade if the essay meets the criterion , but "
-                            "maintain consistency across grading for different essays with the same conditions. "
+                        "content": (
+                            f"Grade the essay based on '{criterion['name']}' "
+                            f"out of {criterion['points_possible']} points. "
+                            "Provide objective, fair grading with specific justification. "
                             f"Essay:\n{truncated_essay}\n\n"
                             f"Context:\n{context_text}\n\n"
-                            "follow the grading format and provide both the grade and a detailed justification: "
-                            f"Grade: [numeric value]/{criterion['points_possible']} Justification: [text]. "
-                            "Ensure the justification is specific to the essay's performance in relation to the criterion.")
+                            "Format: Grade: [numeric value]/[max points] Justification: [text]"
+                        )
                     }]
                 )
 
