@@ -196,7 +196,20 @@ def index():
 
     return render_template('index.html')  # Render the scanning page
 
-@app.route('/process_essay', methods=['GET', 'POST'])  # Define the route for processing the essay
+from concurrent.futures import ThreadPoolExecutor
+
+def process_essay_parallel(essay_text, context_text):
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        summary_future = executor.submit(generate_summary, essay_text)
+        grade_future = executor.submit(grade_essay, essay_text, context_text)
+        
+        summary = summary_future.result()
+        grade = grade_future.result()
+        
+    return summary, grade
+
+# Replace the existing process_essay route with this
+@app.route('/process_essay', methods=['GET', 'POST'])
 def process_essay():
     original_text = session.get('original_text', '')
     context_text = session.get('context_text', '')
@@ -204,11 +217,8 @@ def process_essay():
     if not original_text or not context_text:
         return redirect(url_for('home'))
 
-    # Generate summary
-    summary_result = generate_summary(original_text)
-
-    # Grade the essay based on criteria
-    grade_result = grade_essay(original_text, context_text)
+    # Use parallel processing
+    summary_result, grade_result = process_essay_parallel(original_text, context_text)
 
     return render_template('results.html', essay=original_text, summary=summary_result, grade=grade_result)
 

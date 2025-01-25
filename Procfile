@@ -1,6 +1,1 @@
-
-web: gunicorn app:app \
-    --workers=2 \  # Adjust based on available CPU
-    --timeout=120 \
-    --threads=4  # Use threads for handling simultaneous requests
-
+web: gunicorn app:app
