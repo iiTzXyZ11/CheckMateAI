@@ -36,7 +36,7 @@ def image_to_text(image_file):
 # Function to summarize text in Filipino
 def generate_summary(text):
     if len(text.split()) < 20:
-        return "Error: Ang input na teksto ay dapat magkaroon ng hindi bababa sa 20 salita."
+        return "Error: Ang input na teksto ay dapat magkaroon ng hindi bababa sa 150 salita."
 
     try:
         response = client.chat.completions.create(
@@ -60,7 +60,7 @@ def generate_summary(text):
 def grade_essay(essay_text, context_text):
     # Check essay length once, early return if too short
     if len(essay_text.split()) < 20:
-        return "Error: Ang input na teksto ay dapat magkaroon ng hindi bababa sa 20 salita."
+        return "Error: Ang input na teksto ay dapat magkaroon ng hindi bababa sa 150 salita."
 
     # Retrieve criteria and total points
     criteria = session.get('criteria', [])
@@ -183,10 +183,10 @@ def index():
         # Store the original text in the session
         session['original_text'] = essay  
 
-        # Check if the essay has at least 20 words
+        # Check if the essay has at least 150 words
         if len(essay.split()) < 20:
             return render_template('index.html', essay=essay,
-                                    error="Error: Ang input na teksto ay dapat magkaroon ng hindi bababa sa 20 salita.")
+                                    error="Error: Ang input na teksto ay dapat magkaroon ng hindi bababa sa 150 salita.")
 
         if not context.strip():  # Check if context is empty or just whitespace
             return render_template('index.html', essay=essay,
