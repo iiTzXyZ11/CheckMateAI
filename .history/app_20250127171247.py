@@ -114,7 +114,7 @@ def grade_essay(essay_text, context_text):
                     "clarity, depth, and relevance of the content. Consider the context and parameters provided, "
                     "Respond in Filipino and provide a high grade if the essay meets the criterion , but "
                     "maintain consistency across grading for different essays with the same conditions. "
-                    "ONLY GIVE a low grade (Failing Scores) IF the points and topic discussed in the student work has no connection to the context and criteria."
+                    "ONLY GIVE a low grade IF the points and topic discussed in the student work has no connection to the context and criteria."
                     f"Essay:\n{truncated_essay}\n\n"
                     f"Context:\n{context_text}\n\n"
                     "follow the grading format and provide both the grade and a detailed justification: "

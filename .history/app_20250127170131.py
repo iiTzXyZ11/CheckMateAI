@@ -1,9 +1,9 @@
 import os  # Standard library
 import re
 import g4f
-import g4f.Provider
 from flask import Flask, render_template, redirect, url_for, request, session
 from g4f.client import Client  # GPT-based client
+from g4f.Provider 
 
 
 app = Flask(__name__)
@@ -24,15 +24,7 @@ def image_to_text(image_file):
         
         # Send the request to the new provider
         response = image_to_text_client.chat.completions.create(
-            messages=[{
-                "content": (
-                    "Extract only the plain text from this image. "
-                    "Do not use any special symbols like # or *. "
-                    "If there are crossed-out words, ignore them as they are erasures. "
-                    "Only include the readable text without any formatting."
-                ),
-                "role": "user"
-            }],
+            messages=[{"content": "extract the text from this image", "role": "user"}],
             model="",
             images=images
         )
@@ -40,16 +32,13 @@ def image_to_text(image_file):
         # Check and extract the content from the response
         if hasattr(response, 'choices') and len(response.choices) > 0:
             content = response.choices[0].message.content
-            # Remove any unexpected symbols as a safety measure
-            sanitized_content = content.replace("#", "").replace("*", "").strip()
-            print(f"Extracted content: {sanitized_content}")
-            return sanitized_content if sanitized_content else "No text could be extracted."
+            print(f"Extracted content: {content}")
+            return content.strip() if content else "No text could be extracted."
         return "No text could be extracted."
 
     except Exception as e:
         print(f"Error during image processing: {e}")
         return f"An error occurred during image processing: {str(e)}"
-
 
 # Function to summarize text in Filipino
 def generate_summary(text):
@@ -107,14 +96,13 @@ def grade_essay(essay_text, context_text):
             model="gpt-4o",
             messages=[{
                 "role": "user",
-                "content": (f"Grade the following student work based on the criterion '{criterion['name']}' out of "
+                "content": (f"Grade the following essay based on the criterion '{criterion['name']}' out of "
                     f"{criterion['points_possible']} points. Please be consistent and fair in your grading, "
                     "focusing on the specific aspects of the essay that correspond to the given criterion. "
                     "Do not be overly lenient but also avoid being strict. Ensure the grading is based on the "
                     "clarity, depth, and relevance of the content. Consider the context and parameters provided, "
                     "Respond in Filipino and provide a high grade if the essay meets the criterion , but "
                     "maintain consistency across grading for different essays with the same conditions. "
-                    "ONLY GIVE a low grade (Failing Scores) IF the points and topic discussed in the student work has no connection to the context and criteria."
                     f"Essay:\n{truncated_essay}\n\n"
                     f"Context:\n{context_text}\n\n"
                     "follow the grading format and provide both the grade and a detailed justification: "

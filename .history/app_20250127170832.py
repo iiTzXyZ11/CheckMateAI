@@ -24,15 +24,7 @@ def image_to_text(image_file):
         
         # Send the request to the new provider
         response = image_to_text_client.chat.completions.create(
-            messages=[{
-                "content": (
-                    "Extract only the plain text from this image. "
-                    "Do not use any special symbols like # or *. "
-                    "If there are crossed-out words, ignore them as they are erasures. "
-                    "Only include the readable text without any formatting."
-                ),
-                "role": "user"
-            }],
+            messages=[{"content": "extract the text from this image and do not use (*, #). NOTE: there may be some crossed out words, so please ignore it since it is considered an erasure.", "role": "user"}],
             model="",
             images=images
         )
@@ -40,16 +32,13 @@ def image_to_text(image_file):
         # Check and extract the content from the response
         if hasattr(response, 'choices') and len(response.choices) > 0:
             content = response.choices[0].message.content
-            # Remove any unexpected symbols as a safety measure
-            sanitized_content = content.replace("#", "").replace("*", "").strip()
-            print(f"Extracted content: {sanitized_content}")
-            return sanitized_content if sanitized_content else "No text could be extracted."
+            print(f"Extracted content: {content}")
+            return content.strip() if content else "No text could be extracted."
         return "No text could be extracted."
 
     except Exception as e:
         print(f"Error during image processing: {e}")
         return f"An error occurred during image processing: {str(e)}"
-
 
 # Function to summarize text in Filipino
 def generate_summary(text):
@@ -114,7 +103,7 @@ def grade_essay(essay_text, context_text):
                     "clarity, depth, and relevance of the content. Consider the context and parameters provided, "
                     "Respond in Filipino and provide a high grade if the essay meets the criterion , but "
                     "maintain consistency across grading for different essays with the same conditions. "
-                    "ONLY GIVE a low grade (Failing Scores) IF the points and topic discussed in the student work has no connection to the context and criteria."
+                    "ONLY GIVE a low grade IF the points and topic discussed in the student work has no connection to the context and criteria."
                     f"Essay:\n{truncated_essay}\n\n"
                     f"Context:\n{context_text}\n\n"
                     "follow the grading format and provide both the grade and a detailed justification: "
