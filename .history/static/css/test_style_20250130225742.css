@@ -15,7 +15,7 @@
     }
 
     .box, .box1{
-        font-size: clamp(1.05rem,2vh,1.5rem);
+        font-size: clamp(1.5rem,2vh,1.5rem);
     }
 
     .tips-container h1{
@@ -32,7 +32,7 @@
     }
 
     .tip1, .tip3, .tip5 {
-        font-size: clamp(0.1rem,2vh,2rem);
+        font-size: clamp(0.1rem,2vh,1.032rem);
         padding: 0.5rem;
     }
 
