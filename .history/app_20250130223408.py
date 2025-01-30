@@ -237,7 +237,7 @@ def set_criteria():
 @app.route('/process_essay', methods=['POST'])
 def process_essay():
     student_name = session.get('student_name', 'Unnamed Student')  # Get student's name from session
-    original_text = session.get('original_text', '')
+    original_text = session.get('original_text', ''))
     context_text = session.get('context_text', '')
 
     if not original_text or not context_text:
@@ -246,11 +246,10 @@ def process_essay():
     summary_result = generate_summary(original_text)
     grade_result = grade_essay(original_text, context_text)
 
-    # Define results directory
-    results_dir = os.path.join(app.root_path, 'static', 'results')
-
-    # Ensure the results directory exists
-    os.makedirs(results_dir, exist_ok=True)
+    # Ensure the 'results' directory exists
+    results_dir = 'results'
+    if not os.path.exists(results_dir):
+        os.makedirs(results_dir)  # Create the directory if it doesn't exist
 
     # Save the results to a file with student's name
     results_filename = os.path.join(results_dir, f"{student_name}_results.txt")
@@ -260,13 +259,11 @@ def process_essay():
         f.write(f"Summary:\n{summary_result}\n\n")
         f.write(f"Grade:\n{grade_result}\n")
 
-    # Return the template with the necessary context
     return render_template('results.html',
-                          essay=original_text,
-                          summary=summary_result,
-                          grade=grade_result,
-                          context=context_text,
-                          student_name=student_name)  # Make sure student_name is passed
+                         essay=original_text,
+                         summary=summary_result,
+                         grade=grade_result,
+                         context=context_text)
 
 @app.route('/clear_session', methods=['POST'])
 def clear_session():

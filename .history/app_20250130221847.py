@@ -2,14 +2,13 @@ import os
 import re
 import g4f
 import g4f.Provider
-from datetime import timedelta
 from flask import Flask, render_template, redirect, url_for, request, session
 from g4f.client import Client
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
 app.config['SESSION_TYPE'] = 'filesystem'
-app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=30)
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=30)  # Session lasts 30 minutes
 
 client = Client()
 image_to_text_client = g4f.Client(provider=g4f.Provider.Blackbox)
@@ -161,43 +160,40 @@ def front_page():
 @app.route('/scan', methods=['GET', 'POST'])
 def index():
     if request.method == 'POST':
-        # Get student name from the form and store in session
-        student_name = request.form.get('student_name', '').strip()
-        session['student_name'] = student_name
-        print(f"Saving student name to session: {student_name}")  # Debug print
-
         context = request.form.get('context', '').strip()
         session['context_text'] = context
         
-        # Handling the image or essay input as before...
         image = request.files.get('image')
         if image:
             essay = image_to_text(image)
             if "Error" in essay:
-                return render_template('index.html', error=essay, context=context)
+                return render_template('index.html', 
+                                    error=essay, 
+                                    context=session.get('context_text', ''))
         else:
             essay = request.form.get('essay', '')
 
         session['original_text'] = essay
         
         if len(essay.split()) < 20:
-            return render_template('index.html', essay=essay, context=context, error="Error: Ang input na teksto ay dapat magkaroon ng hindi bababa sa 20 salita.")
+            return render_template('index.html', 
+                                essay=essay, 
+                                context=session.get('context_text', ''),
+                                error="Error: Ang input na teksto ay dapat magkaroon ng hindi bababa sa 20 salita.")
 
         if not context:
-            return render_template('index.html', essay=essay, context=context, error="Error: Please provide context for grading.")
+            return render_template('index.html', 
+                                essay=essay, 
+                                context=session.get('context_text', ''),
+                                error="Error: Please provide context for grading.")
 
         return redirect(url_for('set_criteria'))
 
-    # For GET requests
-    context = session.get('context_text', '')
-    print(f"Retrieved context from session: {context}")  # Debug print
-    return render_template('index.html', context=context)
+    return render_template('index.html', 
+                         context=session.get('context_text', ''))
 
 @app.route('/set_criteria', methods=['GET', 'POST'])
 def set_criteria():
-    # Get context from session
-    context = session.get('context_text', '')
-    
     if 'original_text' not in session or 'context_text' not in session:
         return redirect(url_for('index'))
 
@@ -232,11 +228,10 @@ def set_criteria():
     return render_template('set_criteria.html', 
                          criteria=criteria,
                          total_points_possible=total_points_possible,
-                         context=context)
+                         context=session.get('context_text', ''))
 
 @app.route('/process_essay', methods=['POST'])
 def process_essay():
-    student_name = session.get('student_name', 'Unnamed Student')  # Get student's name from session
     original_text = session.get('original_text', '')
     context_text = session.get('context_text', '')
 
@@ -246,27 +241,11 @@ def process_essay():
     summary_result = generate_summary(original_text)
     grade_result = grade_essay(original_text, context_text)
 
-    # Define results directory
-    results_dir = os.path.join(app.root_path, 'static', 'results')
-
-    # Ensure the results directory exists
-    os.makedirs(results_dir, exist_ok=True)
-
-    # Save the results to a file with student's name
-    results_filename = os.path.join(results_dir, f"{student_name}_results.txt")
-    with open(results_filename, 'w') as f:
-        f.write(f"Student Name: {student_name}\n\n")
-        f.write(f"Original Essay:\n{original_text}\n\n")
-        f.write(f"Summary:\n{summary_result}\n\n")
-        f.write(f"Grade:\n{grade_result}\n")
-
-    # Return the template with the necessary context
     return render_template('results.html',
-                          essay=original_text,
-                          summary=summary_result,
-                          grade=grade_result,
-                          context=context_text,
-                          student_name=student_name)  # Make sure student_name is passed
+                         essay=original_text,
+                         summary=summary_result,
+                         grade=grade_result,
+                         context=context_text)
 
 @app.route('/clear_session', methods=['POST'])
 def clear_session():

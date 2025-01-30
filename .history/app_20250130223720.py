@@ -267,7 +267,6 @@ def process_essay():
                           grade=grade_result,
                           context=context_text,
                           student_name=student_name)  # Make sure student_name is passed
-
 @app.route('/clear_session', methods=['POST'])
 def clear_session():
     session.pop('criteria', None)

@@ -84,10 +84,9 @@
                 <p class="error">{{ error }}</p>
             {% endif %}
 
-            <form action="{{ url_for('process_essay') }}" method="POST">
+            <form action="{{ url_for('process_essay') }}" method="GET">
                 <button type="submit" class="button">Grade Essay</button>
             </form> 
-                        
         </div>
     </div>
 </body>

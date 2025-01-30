@@ -12,6 +12,14 @@
     <link rel="manifest" href="{{ url_for('static', filename='favicons/site.webmanifest', _external=True) }}">
 </head>
 <style>
+    .top-bar {
+        position: absolute;
+        background-color: white;
+        top: clamp(10.5vh, 9vw, 7vh);
+        height: 0.5vh;
+        width: 100%;
+        margin: 0;
+    }
     .again-container {
         background: transparent;
         display: flex;

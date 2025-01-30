@@ -1,8 +1,6 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Essay Scanner Results</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <link rel="stylesheet" href='../static/css/style.css'>
@@ -12,6 +10,14 @@
     <link rel="manifest" href="{{ url_for('static', filename='favicons/site.webmanifest', _external=True) }}">
 </head>
 <style>
+    .top-bar {
+        position: absolute;
+        background-color: white;
+        top: clamp(5.5vh, 9vw, 7vh);
+        height: 0.5vh;
+        width: 100%;
+        margin: 0;
+    }
     .again-container {
         background: transparent;
         display: flex;

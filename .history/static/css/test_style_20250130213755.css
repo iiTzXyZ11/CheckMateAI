@@ -11,11 +11,11 @@
     }
 
     .box  textarea, .box1 textarea{
-        font-size: clamp(0.5rem,5vh,1rem);
+        font-size: clamp(0.5rem,1vh,3rem);
     }
 
     .box{
-        font-size: clamp(1rem,1vh,2rem);
+        font-size: clamp(1rem,1vh,1.032rem);
     }
 
     .tips-container h1{
@@ -45,7 +45,4 @@
         height:fit-content
     }
 
-    .box1 button{
-        font-size: clamp(0.9rem,1vh,1rem);
-    }
 }

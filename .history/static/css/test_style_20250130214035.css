@@ -15,7 +15,7 @@
     }
 
     .box{
-        font-size: clamp(1rem,1vh,2rem);
+        font-size: clamp(0.9rem,1vh,1.032rem);
     }
 
     .tips-container h1{
@@ -46,6 +46,6 @@
     }
 
     .box1 button{
-        font-size: clamp(0.9rem,1vh,1rem);
+        
     }
 }

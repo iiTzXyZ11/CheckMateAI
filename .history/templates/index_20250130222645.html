@@ -41,11 +41,9 @@
             
             <div class="container">
                 <div class="box">
+                    
                     <h2>Student Output:</h2>
                     <form action="{{ url_for('index') }}" method="POST" enctype="multipart/form-data">
-                        <label for="student_name">Student Name:</label>
-                        <input type="text" id="student_name" name="student_name" required>
-                        
                         <p>Enter the student's work below (you can either type the essay or upload an image):</p>
                         <textarea name="essay" placeholder="Enter your essay here (optional)"></textarea>
                         <p>Or upload an image of the handwritten work:</p>

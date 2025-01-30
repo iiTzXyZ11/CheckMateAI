@@ -1,23 +1,28 @@
-import os
+import os  # Standard library
 import re
 import g4f
 import g4f.Provider
-from datetime import timedelta
 from flask import Flask, render_template, redirect, url_for, request, session
-from g4f.client import Client
+from g4f.client import Client  # GPT-based client
+
 
 app = Flask(__name__)
-app.secret_key = os.urandom(24)
-app.config['SESSION_TYPE'] = 'filesystem'
-app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=30)
+app.secret_key = os.urandom(24)  # Generate a random secret key
 
+# Initialize the GPT client for text generation and grading
 client = Client()
+# Initialize the client with the new provider
 image_to_text_client = g4f.Client(provider=g4f.Provider.Blackbox)
 
+# Function to convert image to text
 def image_to_text(image_file):
     try:
         print(f"Received the image: {image_file.filename}")
+
+        # Prepare the image as required by the new provider
         images = [[image_file, image_file.filename]]
+        
+        # Send the request to the new provider
         response = image_to_text_client.chat.completions.create(
             messages=[{
                 "content": (
@@ -32,8 +37,10 @@ def image_to_text(image_file):
             images=images
         )
 
+        # Check and extract the content from the response
         if hasattr(response, 'choices') and len(response.choices) > 0:
             content = response.choices[0].message.content
+            # Remove any unexpected symbols as a safety measure
             sanitized_content = content.replace("#", "").replace("*", "").strip()
             print(f"Extracted content: {sanitized_content}")
             return sanitized_content if sanitized_content else "No text could be extracted."
@@ -43,6 +50,8 @@ def image_to_text(image_file):
         print(f"Error during image processing: {e}")
         return f"An error occurred during image processing: {str(e)}"
 
+
+# Function to summarize text in Filipino
 def generate_summary(text):
     if len(text.split()) < 20:
         return "Error: Ang input na teksto ay dapat magkaroon ng hindi bababa sa 20 salita."
@@ -50,14 +59,14 @@ def generate_summary(text):
     try:
         response = client.chat.completions.create(
             model="gpt-4o",
-            messages=[{"role": "user", "content": f"Summarize this text in Filipino:\n\n{text}"}]
+            messages=[{"role": "user", "content": f"Summarize this text in Filipino:\n\n{text}",}]
         )
 
-        if not response.choices:
+        if not response.choices: # type: ignore
             print("No choices in response for summary.")
             return "No summary could be generated."
 
-        summary_content = response.choices[0].message.content.strip()
+        summary_content = response.choices[0].message.content.strip() # type: ignore
         print(f"Generated summary: {summary_content}")
         return summary_content or "No summary could be generated."
 
@@ -65,10 +74,13 @@ def generate_summary(text):
         print(f"Error during summary generation: {e}")
         return f"An error occurred during summarization: {str(e)}"
 
+# Grade essay function
 def grade_essay(essay_text, context_text):
+    # Check essay length once, early return if too short
     if len(essay_text.split()) < 20:
         return "Error: Ang input na teksto ay dapat magkaroon ng hindi bababa sa 20 salita."
 
+    # Retrieve criteria and total points
     criteria = session.get('criteria', [])
     if not criteria:
         return "No criteria set for grading."
@@ -79,14 +91,18 @@ def grade_essay(essay_text, context_text):
 
     total_points_received = 0
     justifications = {}
+
+    # Collect grades per criterion
     grades_per_criterion = []
     
+    # Compile the regular expression pattern for grade and justification extraction
     grade_pattern = re.compile(r"Grade:\s*(\d+(\.\d+)?)\/(\d+)")
     justification_pattern = re.compile(r"Justification:\s*(.*)")
 
     for criterion in criteria:
-        truncated_essay = essay_text[:1000]
+        truncated_essay = essay_text[:1000]  # Limit essay length for context
 
+        # Modify the prompt for grading
         response = client.chat.completions.create(
             model="gpt-4o",
             messages=[{
@@ -107,30 +123,37 @@ def grade_essay(essay_text, context_text):
             }]
         )
 
-        if not hasattr(response, 'choices') or len(response.choices) == 0:
+        # Validate response
+        if not hasattr(response, 'choices') or len(response.choices) == 0:  # type: ignore
             return f"Invalid response received for criterion '{criterion['name']}'. No choices were found."
 
-        raw_grade = response.choices[0].message.content.strip()
-        print(f"Raw grade for {criterion['name']}: {raw_grade}")
+        raw_grade = response.choices[0].message.content.strip()  # type: ignore
+        print(f"Raw grade for {criterion['name']}: {raw_grade}")  # Debug print
 
+        # Extract grade and justification using regex
         grade_match = grade_pattern.search(raw_grade)
         justification_match = justification_pattern.search(raw_grade)
 
+        # If no grade is found, default to 0 points
         if not grade_match:
             points_received = 0
         else:
             points_received = float(grade_match.group(1))
 
+        # If no justification is found, provide a default message
         if not justification_match:
             justification = "No justification provided."
         else:
             justification = justification_match.group(1)
 
+        # Save the grade and justification
         justifications[criterion['name']] = justification
         total_points_received += points_received
 
+        # Save the grade per criterion
         grades_per_criterion.append(f"Criterion: {criterion['name']} - Grade: {points_received}/{criterion['points_possible']} - Justification: {justification}")
 
+    # Calculate total percentage and letter grade
     percentage = (total_points_received / total_points_possible) * 100
     letter_grade = (
         "A+" if percentage >= 98 else
@@ -144,69 +167,82 @@ def grade_essay(essay_text, context_text):
         "D" if percentage >= 75 else "F"
     )
 
+    # Format the final output including grades per criterion
     justification_summary = "\n".join(grades_per_criterion)
 
     return (f"Draft Grade: {letter_grade}\n"
             f"Draft Score: {total_points_received}/{total_points_possible}\n\n"
             f"Justifications:\n{justification_summary}")
 
-@app.route('/')
+@app.route('/')  # Define the root URL route
 def home():
-    return redirect(url_for('front_page'))
+    print("Home route accessed")  # Debug print
+    return redirect(url_for('front_page'))  # Redirect to the front page
 
-@app.route('/front')
+@app.route('/front')  # Front page route
 def front_page():
+    print("Front page accessed")  # Debug print
     return render_template('front_page.html')
 
 @app.route('/scan', methods=['GET', 'POST'])
 def index():
     if request.method == 'POST':
-        # Get student name from the form and store in session
-        student_name = request.form.get('student_name', '').strip()
-        session['student_name'] = student_name
-        print(f"Saving student name to session: {student_name}")  # Debug print
+        context = request.form['context'].strip()
+        session['context_text'] = context  # ✅ Save context in session
 
-        context = request.form.get('context', '').strip()
-        session['context_text'] = context
-        
-        # Handling the image or essay input as before...
         image = request.files.get('image')
         if image:
             essay = image_to_text(image)
             if "Error" in essay:
                 return render_template('index.html', error=essay, context=context)
         else:
-            essay = request.form.get('essay', '')
+            essay = request.form['essay']
 
-        session['original_text'] = essay
-        
+        session['original_text'] = essay  # ✅ Save essay in session
+
         if len(essay.split()) < 20:
-            return render_template('index.html', essay=essay, context=context, error="Error: Ang input na teksto ay dapat magkaroon ng hindi bababa sa 20 salita.")
+            return render_template('index.html', essay=essay, context=context,
+                                   error="Error: Ang input na teksto ay dapat magkaroon ng hindi bababa sa 20 salita.")
 
         if not context:
-            return render_template('index.html', essay=essay, context=context, error="Error: Please provide context for grading.")
+            return render_template('index.html', essay=essay, context=context,
+                                   error="Error: Please provide context for grading.")
 
-        return redirect(url_for('set_criteria'))
+        return redirect(url_for('set_criteria'))  # ✅ Proceed to grading
 
-    # For GET requests
-    context = session.get('context_text', '')
-    print(f"Retrieved context from session: {context}")  # Debug print
-    return render_template('index.html', context=context)
+    return render_template('index.html', context=session.get('context_text', ''))  # ✅ Load saved context
+
+@app.route('/process_essay', methods=['POST'])
+def process_essay():
+    # Retrieve the saved essay and context from the session
+    original_text = session.get('original_text', '')
+    context_text = session.get('context_text', '')  # ✅ Keep context stored, but not displayed
+    criteria = session.get('criteria', [])  # ✅ Retrieve stored criteria
+
+    # Ensure all necessary data is available
+    if not original_text or not criteria:
+        return redirect(url_for('home'))  # Redirect if missing data
+
+    # Generate summary and grade
+    summary_result = generate_summary(original_text)
+    grade_result = grade_essay(original_text, context_text)  
+
+    return render_template('results.html', 
+                           essay=original_text, 
+                           summary=summary_result, 
+                           grade=grade_result)  # ❌ No need to pass context to HTML
+
 
 @app.route('/set_criteria', methods=['GET', 'POST'])
 def set_criteria():
-    # Get context from session
-    context = session.get('context_text', '')
-    
-    if 'original_text' not in session or 'context_text' not in session:
-        return redirect(url_for('index'))
-
     if request.method == 'POST':
+        # Retrieve the criterion details from the form
         criterion_name = request.form['criterion_name']
-        weight = float(request.form['weight']) / 100
+        weight = float(request.form['weight']) / 100  # Convert to fraction
         points_possible = float(request.form['points_possible'])
         detailed_breakdown = request.form['detailed_breakdown']
 
+        # Create a new criterion entry
         new_criterion = {
             'name': criterion_name,
             'weight': weight,
@@ -214,70 +250,36 @@ def set_criteria():
             'detailed_breakdown': detailed_breakdown
         }
 
+        # Retrieve existing criteria from the session, or initialize if none exist
         if 'criteria' not in session:
             session['criteria'] = []
-        
-        session['criteria'].append(new_criterion)
-        session.modified = True
+        session['criteria'].append(new_criterion)  # Add the new criterion
+        session.modified = True  # Mark the session as modified
 
-        session['total_points_possible'] = sum(
-            criterion['points_possible'] for criterion in session['criteria']
-        )
+        # Recalculate total points possible
+        session['total_points_possible'] = sum(criterion['points_possible'] for criterion in session['criteria'])
 
-        return redirect(url_for('set_criteria'))
+        return redirect(url_for('set_criteria'))  # Redirect to the same page to display updated criteria
 
+    # Load existing criteria for the GET request
     criteria = session.get('criteria', [])
     total_points_possible = session.get('total_points_possible', 0)
-    
-    return render_template('set_criteria.html', 
-                         criteria=criteria,
-                         total_points_possible=total_points_possible,
-                         context=context)
 
-@app.route('/process_essay', methods=['POST'])
-def process_essay():
-    student_name = session.get('student_name', 'Unnamed Student')  # Get student's name from session
-    original_text = session.get('original_text', '')
-    context_text = session.get('context_text', '')
-
-    if not original_text or not context_text:
-        return redirect(url_for('index'))
-
-    summary_result = generate_summary(original_text)
-    grade_result = grade_essay(original_text, context_text)
-
-    # Define results directory
-    results_dir = os.path.join(app.root_path, 'static', 'results')
-
-    # Ensure the results directory exists
-    os.makedirs(results_dir, exist_ok=True)
-
-    # Save the results to a file with student's name
-    results_filename = os.path.join(results_dir, f"{student_name}_results.txt")
-    with open(results_filename, 'w') as f:
-        f.write(f"Student Name: {student_name}\n\n")
-        f.write(f"Original Essay:\n{original_text}\n\n")
-        f.write(f"Summary:\n{summary_result}\n\n")
-        f.write(f"Grade:\n{grade_result}\n")
-
-    # Return the template with the necessary context
-    return render_template('results.html',
-                          essay=original_text,
-                          summary=summary_result,
-                          grade=grade_result,
-                          context=context_text,
-                          student_name=student_name)  # Make sure student_name is passed
+    return render_template('set_criteria.html', criteria=criteria, total_points_possible=total_points_possible)
 
 @app.route('/clear_session', methods=['POST'])
 def clear_session():
-    session.pop('criteria', None)
-    session.pop('total_points_possible', None)
-    return redirect(url_for('set_criteria'))
+    session.pop('criteria', None)  # Remove the criteria data from the session
+    session.pop('total_points_possible', None)  # Remove any other session data if needed
+    return redirect(url_for('set_criteria'))  # Redirect to the set criteria page
 
-@app.route('/contact')
+
+# New route for 'Contact Us'
+@app.route('/contact')  # Define the contact route
 def contact():
-    return redirect("https://www.facebook.com/profile.php?id=61567870400304")
+    return redirect("https://www.facebook.com/profile.php?id=61567870400304")  # Replace with your actual Facebook page URL
 
+# New route for 'How to Use'
 @app.route('/how-to-use', methods=['GET'])
 def how_to_use():
     return render_template('how_to_use.html')
