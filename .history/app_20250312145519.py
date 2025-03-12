@@ -4,8 +4,7 @@ import g4f
 import g4f.Provider
 import time
 import random
-import aiohttp
-from aiohttp import ClientResponseError
+import aiohttp  # Ensure you have this installed (`pip install aiohttp`)
 from datetime import timedelta
 from flask import Flask, render_template, redirect, url_for, request, session
 from markupsafe import Markup
@@ -60,6 +59,20 @@ def format_justification(justification):
     
     return Markup(justification)  # Use Markup to render HTML safely
 
+def retry_request(func, max_retries=3):
+    """Retries an API request with exponential backoff in case of 429 Too Many Requests."""
+    for i in range(max_retries):
+        try:
+            return func()
+        except aiohttp.client_exceptions.ClientResponseError as e:
+            if e.status == 429:  # Handle rate limit
+                wait_time = (2 ** i) + random.uniform(0, 1)  # Exponential backoff
+                print(f"Rate limit hit, retrying in {wait_time:.2f} seconds...")
+                time.sleep(wait_time)
+            else:
+                raise e  # Raise error if it's not a 429
+    raise Exception("Max retries reached")
+
 def generate_summary(text):
     if len(text.split()) < 20:
         return "Error: Ang input na teksto ay dapat magkaroon ng hindi bababa sa 20 salita."
@@ -73,20 +86,6 @@ def generate_summary(text):
         return response.choices[0].message.content.strip()
     except Exception as e:
         return f"An error occurred during summarization: {str(e)}"
-    
-def retry_request(func, max_retries=3):
-    """Retries an API request with exponential backoff in case of 429 Too Many Requests."""
-    for i in range(max_retries):
-        try:
-            return func()
-        except ClientResponseError as e:  # Directly use the imported exception
-            if e.status == 429:  # Handle rate limit
-                wait_time = (2 ** i) + random.uniform(0, 1)  # Exponential backoff
-                print(f"Rate limit hit, retrying in {wait_time:.2f} seconds...")
-                time.sleep(wait_time)
-            else:
-                raise e  # Raise error if it's not a 429
-    raise Exception("Max retries reached")
 
 def grade_essay(essay_text, context_text):
     """Grades an essay using AI with retry handling for rate limits."""
@@ -233,11 +232,9 @@ def set_criteria():
 
 @app.route('/process_essay', methods=['POST'])
 def process_essay():
-    """Handles essay grading and result processing."""
     student_name = session.get('student_name', 'Unnamed Student')
     original_text = session.get('original_text', '')
     context_text = session.get('context_text', '')
-
     if not original_text or not context_text:
         return redirect(url_for('index'))
 

@@ -60,20 +60,6 @@ def format_justification(justification):
     
     return Markup(justification)  # Use Markup to render HTML safely
 
-def generate_summary(text):
-    if len(text.split()) < 20:
-        return "Error: Ang input na teksto ay dapat magkaroon ng hindi bababa sa 20 salita."
-    try:
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[{"role": "user", "content": f"Summarize this text in Filipino:\n\n{text}"}]
-        )
-        if not response.choices:
-            return "No summary could be generated."
-        return response.choices[0].message.content.strip()
-    except Exception as e:
-        return f"An error occurred during summarization: {str(e)}"
-    
 def retry_request(func, max_retries=3):
     """Retries an API request with exponential backoff in case of 429 Too Many Requests."""
     for i in range(max_retries):
@@ -87,6 +73,20 @@ def retry_request(func, max_retries=3):
             else:
                 raise e  # Raise error if it's not a 429
     raise Exception("Max retries reached")
+
+def generate_summary(text):
+    if len(text.split()) < 20:
+        return "Error: Ang input na teksto ay dapat magkaroon ng hindi bababa sa 20 salita."
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[{"role": "user", "content": f"Summarize this text in Filipino:\n\n{text}"}]
+        )
+        if not response.choices:
+            return "No summary could be generated."
+        return response.choices[0].message.content.strip()
+    except Exception as e:
+        return f"An error occurred during summarization: {str(e)}"
 
 def grade_essay(essay_text, context_text):
     """Grades an essay using AI with retry handling for rate limits."""
