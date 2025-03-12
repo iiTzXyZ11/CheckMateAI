@@ -61,7 +61,7 @@ python-multipart==0.0.20
 python-socks==2.6.1
 
 pywebview==5.3.2
-
+pywin32==308
 requests==2.32.3
 
 six==1.17.0
