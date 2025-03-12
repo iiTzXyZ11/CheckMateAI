@@ -4,12 +4,13 @@ import g4f
 import g4f.Provider
 from datetime import timedelta
 from flask import Flask, render_template, redirect, url_for, request, session
-from markupsafe import Markup
+import flask_markdown
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
 app.config['SESSION_TYPE'] = 'filesystem'
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=30)
+Markdown(app)
 
 client = g4f.Client()
 image_to_text_client = g4f.Client(provider=g4f.Provider.Blackbox)
@@ -42,19 +43,6 @@ def image_to_text(image_file):
         print(f"Error during image processing: {e}")
         return f"An error occurred during image processing: {str(e)}"
 
-def format_justification(justification):
-    """
-    Formats the justification to:
-    - Convert **bold text** to <strong> HTML tags
-    - Replace newlines with <br> for proper line breaks
-    - Preserve numbered lists (e.g., "1. First point" → "1. First point")
-    """
-    justification = re.sub(r'\*\*(.*?)\*\*', r'<strong>\1</strong>', justification)  # Bold text
-    justification = justification.replace("\n", "<br>")  # Line breaks
-    justification = re.sub(r'(\d+)\.', r'<br>\1.', justification)  # Preserve numbered lists
-    
-    return Markup(justification)  # Use Markup to render HTML safely
-
 def generate_summary(text):
     if len(text.split()) < 20:
         return "Error: Ang input na teksto ay dapat magkaroon ng hindi bababa sa 20 salita."
@@ -64,9 +52,13 @@ def generate_summary(text):
             messages=[{"role": "user", "content": f"Summarize this text in Filipino:\n\n{text}"}]
         )
         if not response.choices:
+            print("No choices in response for summary.")
             return "No summary could be generated."
-        return response.choices[0].message.content.strip()
+        summary_content = response.choices[0].message.content.strip()
+        print(f"Generated summary: {summary_content}")
+        return summary_content or "No summary could be generated."
     except Exception as e:
+        print(f"Error during summary generation: {e}")
         return f"An error occurred during summarization: {str(e)}"
 
 def grade_essay(essay_text, context_text):
@@ -82,13 +74,15 @@ def grade_essay(essay_text, context_text):
         return "No valid criteria to grade the essay."
     
     total_points_received = 0
+    justifications = {}
     grades_per_criterion = []
     
+    # Define regex patterns
     grade_pattern = re.compile(r"Grade:\s*(\d+(\.\d+)?)\/(\d+)")
-    justification_pattern = re.compile(r"Justification:\s*(.*)", re.DOTALL)
+    justification_pattern = re.compile(r"Justification:\s*(.*)")
 
     for criterion in criteria:
-        truncated_essay = essay_text[:1000]  
+        truncated_essay = essay_text[:1000]  # Avoid too long prompts
 
         response = client.chat.completions.create(
             model="gpt-4o",
@@ -106,22 +100,32 @@ def grade_essay(essay_text, context_text):
                     f"Essay to grade: {truncated_essay}\n\n"
                     "Your response should follow this format:\n"
                     f"Grade: [numeric value]/{criterion['points_possible']}\n"
-                    "Justification: [3 sentenced Detailed justification including examples]"
+                    "Justification: [Provide specific examples from the student's work that justify your grade (cite lines from the student's work to support your grading). Mention both positive aspects and areas for improvement.]"
                 )
             }]
         )
 
-        raw_grade = response.choices[0].message.content.strip()
 
+        if not hasattr(response, 'choices') or len(response.choices) == 0:
+            return f"Invalid response received for criterion '{criterion['name']}'. No choices were found."
+
+        raw_grade = response.choices[0].message.content.strip()
+        print(f"Raw grade for {criterion['name']}: {raw_grade}")
+
+        # Extract Grade
         grade_match = grade_pattern.search(raw_grade)
         points_received = float(grade_match.group(1)) if grade_match else 0
 
+        # Extract Justification
         justification_match = justification_pattern.search(raw_grade)
         justification = justification_match.group(1) if justification_match else "No justification provided."
 
+        # Store results
+        justifications[criterion['name']] = justification
         total_points_received += points_received
         grades_per_criterion.append(f"Criterion: {criterion['name']} - Grade: {points_received}/{criterion['points_possible']} - Justification: {justification}")
 
+    # Final Computation and Result Formatting
     final_grade = f"{total_points_received}/{total_points_possible}"
     result_summary = "\n".join(grades_per_criterion)
 
@@ -217,33 +221,37 @@ def process_essay():
     original_text = session.get('original_text', '')
     context_text = session.get('context_text', '')
     if not original_text or not context_text:
+        print("Error: Missing original text or context in session.")
         return redirect(url_for('index'))
 
     summary_result = generate_summary(original_text)
     grade_result = grade_essay(original_text, context_text)
 
+    # Parse the grade result
     grade_lines = grade_result.split('\n')
     final_grade = grade_lines[0] if grade_lines else 'N/A'
     
+    # Extract individual criterion grades and justifications
     criteria_results = []
-
-    for line in grade_lines[2:]:  
+    current_criterion = {}
+    
+    for line in grade_lines[2:]:  # Skip the empty line after final grade
         if line.strip():
             if line.startswith('Criterion:'):
+                # Parse the line that contains criterion info
                 parts = line.split(' - ')
                 if len(parts) >= 3:
                     criterion_name = parts[0].replace('Criterion:', '').strip()
                     grade = parts[1].replace('Grade:', '').strip()
                     justification = parts[2].replace('Justification:', '').strip()
                     
-                    justification = format_justification(justification)  
-
                     criteria_results.append({
                         'name': criterion_name,
                         'grade': grade,
-                        'justification': justification  
+                        'justification': justification
                     })
 
+    # Create results directory and save file
     results_dir = os.path.join(app.root_path, 'static', 'results')
     os.makedirs(results_dir, exist_ok=True)
 

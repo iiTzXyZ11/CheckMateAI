@@ -106,7 +106,7 @@ def grade_essay(essay_text, context_text):
                     f"Essay to grade: {truncated_essay}\n\n"
                     "Your response should follow this format:\n"
                     f"Grade: [numeric value]/{criterion['points_possible']}\n"
-                    "Justification: [3 sentenced Detailed justification including examples]"
+                    "Justification: [Detailed justification including examples]"
                 )
             }]
         )

@@ -78,10 +78,11 @@
         {% if criteria_results %}
             <ul>
                 {% for criterion in criteria_results %}
-                <li>
-                    <strong>{{ criterion.name }}:</strong> {{ criterion.grade }}
-                    <p>{{ criterion.justification | safe }}</p>
-                </li>
+                    <li>
+                        <strong>{{ criterion.name }}:</strong> 
+                        <span> {{ criterion.grade }}</span>
+                        <p>{{ criterion.justification }}</p>
+                    </li>
                 {% endfor %}
             </ul>
         {% else %}
