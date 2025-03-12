@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" >
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>CheckMate AI</title>
+        <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+        <link rel="stylesheet" href="{{ url_for('static', filename='css/mobile_test_style.css') }}">
+        <link rel="stylesheet" href="{{ url_for('static', filename='css/test_style.css') }}">
+        <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
+        <link href='https://fonts.googleapis.com/css?family=Oswald' rel='stylesheet'>
+        <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='favicons/apple-touch-icon.png', _external=True) }}">
+        <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='favicons/favicon-32x32.png', _external=True) }}">
+        <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='favicons/favicon-16x16.png', _external=True) }}">
+        <link rel="manifest" href="{{ url_for('static', filename='favicons/site.webmanifest', _external=True) }}">
+        <script src="{{ url_for('static', filename='script.js') }}"></script>
+    </head>
+    <body>
+        <header class="header">
+            <div class="header-text">
+                <img src="{{ url_for('static', filename='css/images/logo_black.jpg') }}" alt="CheckMate Logo">
+                <p>CHECKMATE</p>
+            </div>
+    
+            <div class="header-buttons">
+                <a href="{{ url_for('contact') }}" class="header-link">
+                    <img src="{{ url_for('static', filename='css/images/contact.png') }}" class="contact-icon" alt="Contact Icon">
+                    Contact Us
+                </a>
+                <a href="https://www.youtube.com/watch?v=Ia6pL32Ip8I&ab_channel=CheckMateAI" 
+                target="_blank" 
+                rel="noopener noreferrer" 
+                class="header-link">
+                    <img src="{{ url_for('static', filename='css/images/question_mark.png') }}" class="qm-icon" alt="Help Icon">
+                    How to Use
+                </a>
+            </div>
+        </header>
+        <div class="top-bar"></div>
+    
+        <div class="content-wrapper">
+            
+            <div class="container">
+                <div class="box">
+                    <h2>Student Output:</h2>
+                    <form id="essay-form">
+                        <label for="student_name">Student Name:</label>
+                        <input type="text" id="student_name" name="student_name" required>
+                        
+                        <p>Enter the student's work below (you can either type the essay or upload an image):</p>
+                        <textarea id="essay" name="essay" placeholder="Enter your essay here (optional)"></textarea>
+                        <p>Or upload an image of the handwritten work:</p>
+                        <label class="custom-file-upload">
+                            Choose a file
+                            <input type="file" name="image" accept="image/*" style="display: none;" onchange="updateFileName()" />
+                        </label>
+                        <div id="file-name" style="margin-top: 10px; color: black;"></div>
+
+                        <div class="box1">
+                            <h2 style="color: black">Context and Parameters:</h2>
+                            <p>Enter the context for your essay below (Provide background information, the main topic or question of your essay, and any specific guidelines that will help in assessing the essay):</p>
+                            <textarea id="context" name="context" placeholder="Enter context here" required>{{ context }}</textarea>                      
+                            <button type="submit">Submit</button>
+                        </div>
+                    </form>
+                    
+                    <div id="summary-output"></div>
+                    <div id="grading-output"></div>
+                </div>
+            </div>
+            
+            <div class="tips-wrapper">
+                <div class="tips-container">
+                    <h1>TIPS FOR ACCURACY</h1>
+                        <div class="tips-grid">
+                            <div class="tip1">
+                                <h2>Provide a Clear Assignment Prompt</h2>
+                                <p>Describe the main topic, focus areas, and any themes to address. This allows students to approach the topic in different ways while staying relevant.</p>
+                            </div>
+
+                            <div class="tip2">
+                                <img class="glasses" src="static/css/images/tips/Glasses.png" alt="Glasses Icon" loading="lazy">
+                            </div>
+
+                            <div class="tip3">
+                                <h2>List Key Terms, Concepts, and Exceptions</h2>
+                                <p>Include essential vocabulary and concepts without restricting language, allowing students to use varied expressions while remaining accurate to the topic.</p>
+                            </div>
+
+                            <div class="tip4">
+                                <img class="list" src="static/css/images/tips/List.png" alt="List Icon" loading="lazy">
+                            </div>
+
+                            <div class="tip5">
+                                <h2>Clarify Depth of Analysis Expected</h2>
+                                <p>Specify if students should provide a high-level overview or a deeper analysis. This encourages students to explore different perspectives and levels of detail without straying off-topic.</p>
+                            </div>
+
+                            <div class="tip6">
+                                <img class="board" src="static/css/images/tips/Board.png" alt="Board Image" loading="lazy">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <script>
+            function updateFileName() {
+                const fileInput = document.querySelector('input[type="file"]');
+                const fileNameDisplay = document.getElementById('file-name');
+                if (fileInput.files.length > 0) {
+                    fileNameDisplay.textContent = "Selected file: " + fileInput.files[0].name;
+                }
+            }
+        </script>
+    </body>
+</html>

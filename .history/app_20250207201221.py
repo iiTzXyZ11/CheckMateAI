@@ -86,21 +86,16 @@ def grade_essay(essay_text, context_text):
             model="gpt-4o",
             messages=[{
                 "role": "user",
-                "content": (
-                    f"Grade the following student work based on the criterion '{criterion['name']}' out of "
-                    f"{criterion['points_possible']} points, focusing on the specific aspects of the essay that correspond to the given criterion. "
-                    "Do not be overly lenient but also avoid being strict. Consider the context and parameters provided. "
-                    "Respond in Filipino and provide a high grade if the essay meets the criterion. "
-                    "ONLY GIVE a failing grade when the points and topic discussed in the student work has no connection to the context and criteria. "
+                "content": (f"Grade the following student work based on the criterion '{criterion['name']}' out of "
+                    f"{criterion['points_possible']} points. focusing on the specific aspects of the essay that correspond to the given criterion. Do not be overly lenient but also avoid being strict. Consider the context and parameters provided. Respond in Filipino and provide a high grade if the essay meets the criterion. "
+                    "ONLY GIVE a failing grade when the points and topic discussed in the student work has no connection to the context and criteria."
                     f"Essay:\n{truncated_essay}\n\n"
                     f"Context:\n{context_text}\n\n"
                     "Follow the grading format and provide both the grade and a detailed justification: "
                     f"Grade: [numeric value]/{criterion['points_possible']} Justification: [text]. "
-                    "Ensure the justification is specific to the essay's performance in relation to the criterion."
-                )
+                    "Ensure the justification is specific to the essay's performance in relation to the criterion.")
             }]
         )
-
 
         if not hasattr(response, 'choices') or len(response.choices) == 0:
             return f"Invalid response received for criterion '{criterion['name']}'. No choices were found."

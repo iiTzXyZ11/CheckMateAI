@@ -59,6 +59,9 @@ def generate_summary(text):
         print(f"Error during summary generation: {e}")
         return f"An error occurred during summarization: {str(e)}"
 
+import re
+import json
+
 def grade_essay(essay_text, context_text):
     if len(essay_text.split()) < 20:
         return "Error: Ang input na teksto ay dapat magkaroon ng hindi bababa sa 20 salita."
@@ -74,58 +77,58 @@ def grade_essay(essay_text, context_text):
     total_points_received = 0
     justifications = {}
     grades_per_criterion = []
-    
-    # Define regex patterns
-    grade_pattern = re.compile(r"Grade:\s*(\d+(\.\d+)?)\/(\d+)")
-    justification_pattern = re.compile(r"Justification:\s*(.*)")
 
     for criterion in criteria:
-        truncated_essay = essay_text[:1000]  # Avoid too long prompts
+        truncated_essay = essay_text[:1000]  # Limit input size for AI
 
+        # **FORCE AI TO OUTPUT JSON**
         response = client.chat.completions.create(
             model="gpt-4o",
             messages=[{
                 "role": "user",
-                "content": (
-                    f"Grade the following student work based on the criterion '{criterion['name']}' out of "
-                    f"{criterion['points_possible']} points, focusing on the specific aspects of the essay that correspond to the given criterion. "
-                    "Do not be overly lenient but also avoid being strict. Consider the context and parameters provided. "
-                    "Respond in Filipino and provide a high grade if the essay meets the criterion. "
-                    "ONLY GIVE a failing grade when the points and topic discussed in the student work has no connection to the context and criteria. "
-                    f"Essay:\n{truncated_essay}\n\n"
-                    f"Context:\n{context_text}\n\n"
-                    "Follow the grading format and provide both the grade and a detailed justification: "
-                    f"Grade: [numeric value]/{criterion['points_possible']} Justification: [text]. "
-                    "Ensure the justification is specific to the essay's performance in relation to the criterion."
-                )
+                "content": (f"Grade the following student work based on the criterion '{criterion['name']}' out of "
+                    f"{criterion['points_possible']} points. Provide the response in valid JSON format: "
+                    '{"grade": [numeric_value], "justification": "[text]"}'
+                    "\n\nEssay:\n" + truncated_essay +
+                    "\n\nContext:\n" + context_text)
             }]
         )
-
 
         if not hasattr(response, 'choices') or len(response.choices) == 0:
             return f"Invalid response received for criterion '{criterion['name']}'. No choices were found."
 
-        raw_grade = response.choices[0].message.content.strip()
-        print(f"Raw grade for {criterion['name']}: {raw_grade}")
+        raw_response = response.choices[0].message.content.strip()
+        print(f"Raw Response for {criterion['name']}: {raw_response}")  # Debugging output
 
-        # Extract Grade
-        grade_match = grade_pattern.search(raw_grade)
-        points_received = float(grade_match.group(1)) if grade_match else 0
+        # **TRY PARSING JSON RESPONSE**
+        try:
+            json_response = json.loads(raw_response)
+            points_received = float(json_response.get("grade", 0))
+            justification = json_response.get("justification", "No justification provided.")
+        except json.JSONDecodeError:
+            print("⚠️ Failed to parse JSON. Falling back to regex.")
+            
+            # If JSON fails, use regex as a backup
+            grade_pattern = re.compile(r"Grade\s*[:\-]\s*\**\s*(\d+(\.\d+)?)\s*/?\s*(\d+)")
+            justification_pattern = re.compile(r"Justification:\s*\**\s*(.*)")
 
-        # Extract Justification
-        justification_match = justification_pattern.search(raw_grade)
-        justification = justification_match.group(1) if justification_match else "No justification provided."
+            grade_match = grade_pattern.search(raw_response)
+            points_received = float(grade_match.group(1)) if grade_match else 0
 
-        # Store results
+            justification_match = justification_pattern.search(raw_response)
+            justification = justification_match.group(1) if justification_match else "No justification provided."
+
+        # Store results properly
         justifications[criterion['name']] = justification
         total_points_received += points_received
         grades_per_criterion.append(f"Criterion: {criterion['name']} - Grade: {points_received}/{criterion['points_possible']} - Justification: {justification}")
 
-    # Final Computation and Result Formatting
+    # Final Grade Computation
     final_grade = f"{total_points_received}/{total_points_possible}"
     result_summary = "\n".join(grades_per_criterion)
 
     return f"Final Grade: {final_grade}\n\n{result_summary}"
+
 
 @app.route('/')
 def home():
@@ -211,60 +214,57 @@ def set_criteria():
                          total_points_possible=total_points_possible,
                          context=context)
 
+# Function to remove emojis
+def remove_emojis(text):
+    emoji_pattern = re.compile("[\U00010000-\U0010FFFF]", flags=re.UNICODE)
+    return emoji_pattern.sub(r'', text)
+
 @app.route('/process_essay', methods=['POST'])
 def process_essay():
-    student_name = session.get('student_name', 'Unnamed Student')
-    original_text = session.get('original_text', '')
-    context_text = session.get('context_text', '')
-    if not original_text or not context_text:
-        print("Error: Missing original text or context in session.")
-        return redirect(url_for('index'))
+    try:
+        data = request.get_json()
+        essay_text = data['essay']
+        
+        # Call your grading and summarization functions
+         summary_result = generate_summary(original_text)
+        grade_result = grade_essay(original_text, context_text)
+        
+        # Remove emojis from the summary
+        summary_result = remove_emojis(summary_result)
 
-    summary_result = generate_summary(original_text)
-    grade_result = grade_essay(original_text, context_text)
+        # Process grading results (if needed)
+        processed_grades = []
+        final_grade = 0
+        total_possible = 0
 
-    # Parse the grade result
-    grade_lines = grade_result.split('\n')
-    final_grade = grade_lines[0] if grade_lines else 'N/A'
+        for criterion in grading_results:
+            grade = criterion.get('grade', 0)
+            points_possible = criterion.get('points_possible', 50)  # Assuming 50 as default
+            justification = criterion.get('justification', 'No justification provided.')
+
+            processed_grades.append(f"Criterion: {criterion['name']} - Grade: {grade}/{points_possible} - Justification: {justification}")
+            
+            final_grade += grade
+            total_possible += points_possible
+
+        final_grade_percentage = (final_grade / total_possible) * 100 if total_possible else 0
+
+        # Save results to a file (without emojis)
+        with open("output.txt", "w", encoding="utf-8") as f:
+            f.write(f"Summary:\n{summary_result}\n\n")
+            f.write("Grading Results:\n")
+            for result in processed_grades:
+                f.write(result + "\n")
+            f.write(f"\nFinal Grade: {final_grade}/{total_possible} ({final_grade_percentage:.2f}%)\n")
+
+        return jsonify({
+            "summary": summary_result,
+            "grading": grading_results,
+            "final_grade": final_grade_percentage
+        })
     
-    # Extract individual criterion grades and justifications
-    criteria_results = []
-    current_criterion = {}
-    
-    for line in grade_lines[2:]:  # Skip the empty line after final grade
-        if line.strip():
-            if line.startswith('Criterion:'):
-                # Parse the line that contains criterion info
-                parts = line.split(' - ')
-                if len(parts) >= 3:
-                    criterion_name = parts[0].replace('Criterion:', '').strip()
-                    grade = parts[1].replace('Grade:', '').strip()
-                    justification = parts[2].replace('Justification:', '').strip()
-                    
-                    criteria_results.append({
-                        'name': criterion_name,
-                        'grade': grade,
-                        'justification': justification
-                    })
-
-    # Create results directory and save file
-    results_dir = os.path.join(app.root_path, 'static', 'results')
-    os.makedirs(results_dir, exist_ok=True)
-
-    results_filename = os.path.join(results_dir, f"{student_name}_results.txt")
-    with open(results_filename, 'w', encoding='utf-8') as f:
-        f.write(f"Student Name: {student_name}\n\n")
-        f.write(f"Original Essay:\n{original_text}\n\n")
-        f.write(f"Summary:\n{summary_result}\n\n")
-        f.write(f"Grade:\n{grade_result}\n")
-
-    return render_template('results.html',
-                         essay=original_text,
-                         summary=summary_result,
-                         final_grade=final_grade,
-                         criteria_results=criteria_results,
-                         context=context_text,
-                         student_name=student_name)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/clear_session', methods=['POST'])
 def clear_session():

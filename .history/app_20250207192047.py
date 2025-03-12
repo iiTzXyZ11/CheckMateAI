@@ -75,38 +75,33 @@ def grade_essay(essay_text, context_text):
     justifications = {}
     grades_per_criterion = []
     
-    # Define regex patterns
-    grade_pattern = re.compile(r"Grade:\s*(\d+(\.\d+)?)\/(\d+)")
-    justification_pattern = re.compile(r"Justification:\s*(.*)")
+    # Improved regex patterns
+    grade_pattern = re.compile(r"Grade:\s*\**\s*(\d+(\.\d+)?)\s*/\s*(\d+)")
+    justification_pattern = re.compile(r"Justification:\s*\**\s*(.*)")
 
     for criterion in criteria:
-        truncated_essay = essay_text[:1000]  # Avoid too long prompts
+        truncated_essay = essay_text[:1000]  # Limit input size for better AI responses
 
         response = client.chat.completions.create(
             model="gpt-4o",
             messages=[{
                 "role": "user",
-                "content": (
-                    f"Grade the following student work based on the criterion '{criterion['name']}' out of "
-                    f"{criterion['points_possible']} points, focusing on the specific aspects of the essay that correspond to the given criterion. "
-                    "Do not be overly lenient but also avoid being strict. Consider the context and parameters provided. "
-                    "Respond in Filipino and provide a high grade if the essay meets the criterion. "
-                    "ONLY GIVE a failing grade when the points and topic discussed in the student work has no connection to the context and criteria. "
+                "content": (f"Grade the following student work based on the criterion '{criterion['name']}' out of "
+                    f"{criterion['points_possible']} points. Focus on specific aspects of the essay that correspond to the given criterion. Do not be overly lenient but also avoid being too strict. Respond in Filipino and provide a high grade if the essay meets the criterion."
+                    "ONLY GIVE a failing grade when the points and topic discussed in the student work has no connection to the context and criteria."
                     f"Essay:\n{truncated_essay}\n\n"
                     f"Context:\n{context_text}\n\n"
-                    "Follow the grading format and provide both the grade and a detailed justification: "
+                    "Follow this grading format and provide both the grade and a detailed justification: "
                     f"Grade: [numeric value]/{criterion['points_possible']} Justification: [text]. "
-                    "Ensure the justification is specific to the essay's performance in relation to the criterion."
-                )
+                    "Ensure the justification is specific to the essay's performance in relation to the criterion.")
             }]
         )
-
 
         if not hasattr(response, 'choices') or len(response.choices) == 0:
             return f"Invalid response received for criterion '{criterion['name']}'. No choices were found."
 
         raw_grade = response.choices[0].message.content.strip()
-        print(f"Raw grade for {criterion['name']}: {raw_grade}")
+        print(f"Raw grade for {criterion['name']}: {raw_grade}")  # Debugging output
 
         # Extract Grade
         grade_match = grade_pattern.search(raw_grade)
@@ -116,16 +111,17 @@ def grade_essay(essay_text, context_text):
         justification_match = justification_pattern.search(raw_grade)
         justification = justification_match.group(1) if justification_match else "No justification provided."
 
-        # Store results
+        # Store results properly
         justifications[criterion['name']] = justification
         total_points_received += points_received
         grades_per_criterion.append(f"Criterion: {criterion['name']} - Grade: {points_received}/{criterion['points_possible']} - Justification: {justification}")
 
-    # Final Computation and Result Formatting
+    # Final Grade Computation
     final_grade = f"{total_points_received}/{total_points_possible}"
     result_summary = "\n".join(grades_per_criterion)
 
     return f"Final Grade: {final_grade}\n\n{result_summary}"
+
 
 @app.route('/')
 def home():
@@ -213,7 +209,7 @@ def set_criteria():
 
 @app.route('/process_essay', methods=['POST'])
 def process_essay():
-    student_name = session.get('student_name', 'Unnamed Student')
+    student_name = session.get('student_name', 'Unnamed Student')  # Get student's name from session
     original_text = session.get('original_text', '')
     context_text = session.get('context_text', '')
     if not original_text or not context_text:
@@ -223,48 +219,32 @@ def process_essay():
     summary_result = generate_summary(original_text)
     grade_result = grade_essay(original_text, context_text)
 
-    # Parse the grade result
-    grade_lines = grade_result.split('\n')
-    final_grade = grade_lines[0] if grade_lines else 'N/A'
-    
-    # Extract individual criterion grades and justifications
-    criteria_results = []
-    current_criterion = {}
-    
-    for line in grade_lines[2:]:  # Skip the empty line after final grade
-        if line.strip():
-            if line.startswith('Criterion:'):
-                # Parse the line that contains criterion info
-                parts = line.split(' - ')
-                if len(parts) >= 3:
-                    criterion_name = parts[0].replace('Criterion:', '').strip()
-                    grade = parts[1].replace('Grade:', '').strip()
-                    justification = parts[2].replace('Justification:', '').strip()
-                    
-                    criteria_results.append({
-                        'name': criterion_name,
-                        'grade': grade,
-                        'justification': justification
-                    })
-
-    # Create results directory and save file
+    # Define results directory
     results_dir = os.path.join(app.root_path, 'static', 'results')
+
+    # Ensure the results directory exists
     os.makedirs(results_dir, exist_ok=True)
 
+    print(f"Generated Grade: {grade_result}")
+    print(f"Generated Summary: {summary_result}")
+
+
+    # Save the results to a file with student's name
     results_filename = os.path.join(results_dir, f"{student_name}_results.txt")
-    with open(results_filename, 'w', encoding='utf-8') as f:
+    with open(results_filename, 'w') as f:
         f.write(f"Student Name: {student_name}\n\n")
         f.write(f"Original Essay:\n{original_text}\n\n")
         f.write(f"Summary:\n{summary_result}\n\n")
         f.write(f"Grade:\n{grade_result}\n")
 
+    session.modified = True
+    # Return the template with the necessary context
     return render_template('results.html',
-                         essay=original_text,
-                         summary=summary_result,
-                         final_grade=final_grade,
-                         criteria_results=criteria_results,
-                         context=context_text,
-                         student_name=student_name)
+                          essay=original_text,
+                          summary=summary_result,
+                          grade=grade_result,
+                          context=context_text,
+                          student_name=student_name)  # Make sure student_name is passed
 
 @app.route('/clear_session', methods=['POST'])
 def clear_session():
