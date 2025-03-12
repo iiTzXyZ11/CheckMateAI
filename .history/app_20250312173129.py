@@ -17,7 +17,7 @@ app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=30)
 
 client = g4f.Client(provider=g4f.Provider.ChatGptEs)
 summary_client = g4f.Client(provider=g4f.Provider.Pizzagpt)
-image_to_text_client = g4f.Client(provider=g4f.Provider.Blackbox) 
+image_to_text_client = g4f.Client(provider=g4f.Provider.Blackbox)
 
 
 def image_to_text(image_file):

@@ -16,8 +16,7 @@ app.config['SESSION_TYPE'] = 'filesystem'
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=30)
 
 client = g4f.Client(provider=g4f.Provider.ChatGptEs)
-summary_client = g4f.Client(provider=g4f.Provider.Pizzagpt)
-image_to_text_client = g4f.Client(provider=g4f.Provider.Blackbox) 
+image_to_text_client = g4f.Client(provider=g4f.Provider.Blackbox)
 
 
 def image_to_text(image_file):
@@ -74,7 +73,7 @@ def generate_summary(text):
         return "Error: Ang input na teksto ay dapat magkaroon ng hindi bababa sa 20 salita."
     try:
         response = client.chat.completions.create(
-            model="gpt-4o-mini",
+            model="gpt-4o",
             messages=[{"role": "user", "content": f"Summarize this text in Filipino:\n\n{text}"}]
         )
         if not response.choices:

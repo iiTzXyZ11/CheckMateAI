@@ -15,9 +15,8 @@ app.secret_key = os.urandom(24)
 app.config['SESSION_TYPE'] = 'filesystem'
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=30)
 
-client = g4f.Client(provider=g4f.Provider.ChatGptEs)
-summary_client = g4f.Client(provider=g4f.Provider.Pizzagpt)
-image_to_text_client = g4f.Client(provider=g4f.Provider.Blackbox) 
+client = g4f.ChatCompletion.create(provider=g4f.Provider.DeepInfraChat)
+image_to_text_client = g4f.Client(provider=g4f.Provider.Blackbox)
 
 
 def image_to_text(image_file):
@@ -74,7 +73,7 @@ def generate_summary(text):
         return "Error: Ang input na teksto ay dapat magkaroon ng hindi bababa sa 20 salita."
     try:
         response = client.chat.completions.create(
-            model="gpt-4o-mini",
+            model="gpt-4o",
             messages=[{"role": "user", "content": f"Summarize this text in Filipino:\n\n{text}"}]
         )
         if not response.choices:
@@ -140,11 +139,11 @@ def grade_essay(essay_text, context_text):
                         "2. Both the strengths and areas for improvement in the student's work\n"
                         "3. The depth of understanding demonstrated, not just surface-level content\n"
                         "4. The appropriate use of concepts and terminology related to the topic\n\n"
-                        "Only respond in Filipino with a fair assessment. Only assign a failing grade if the student work shows no clear connection to the required topic or criterion.\n\n"
+                        "ALWAYS respond in Filipino with a fair assessment. Only assign a failing grade if the student work shows no clear connection to the required topic or criterion.\n\n"
                         f"Essay to grade: {truncated_essay}\n\n"
                         "Your response should follow this format:\n"
                         f"Grade: [numeric value]/{criterion['points_possible']}\n"
-                        "Justification: [Filipino 3-sentence detailed justification including examples]"
+                        "Justification: [3-sentence detailed justification including examples]"
                     )
                 }]
             ))

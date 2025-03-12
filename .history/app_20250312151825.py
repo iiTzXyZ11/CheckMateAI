@@ -2,8 +2,10 @@ import os
 import re
 import g4f
 import g4f.Provider
+from g4f.errors import ResponseStatusError
 import time
 import random
+import asyncio
 import aiohttp
 from aiohttp import ClientResponseError
 from datetime import timedelta
@@ -15,19 +17,14 @@ app.secret_key = os.urandom(24)
 app.config['SESSION_TYPE'] = 'filesystem'
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=30)
 
-client = g4f.Client(provider=g4f.Provider.ChatGptEs)
-summary_client = g4f.Client(provider=g4f.Provider.Pizzagpt)
-image_to_text_client = g4f.Client(provider=g4f.Provider.Blackbox) 
+client = g4f.Client()
+image_to_text_client = g4f.Client(provider=g4f.Provider.Blackbox)
 
 
 def image_to_text(image_file):
     try:
-        print("\n===== Image Processing Start =====")
-        print(f"Received image: {image_file.filename}")
-
+        print(f"Received the image: {image_file.filename}")
         images = [[image_file, image_file.filename]]
-
-        print("Sending image to AI for text extraction...")
         response = image_to_text_client.chat.completions.create(
             messages=[{
                 "content": (
@@ -43,26 +40,22 @@ def image_to_text(image_file):
         )
 
         if hasattr(response, 'choices') and len(response.choices) > 0:
-            raw_content = response.choices[0].message.content
-            sanitized_content = raw_content.replace("#", "").replace("*", "").strip()
-
-            print("\n===== AI Response =====")
-            print(f"Raw extracted content: {raw_content}")
-            print(f"Sanitized content: {sanitized_content}")
-            print("=========================\n")
-
+            content = response.choices[0].message.content
+            sanitized_content = content.replace("#", "").replace("*", "").strip()
+            print(f"Extracted content: {sanitized_content}")
             return sanitized_content if sanitized_content else "No text could be extracted."
-        
-        print("No text extracted from the image.")
         return "No text could be extracted."
-
     except Exception as e:
-        print("\n===== Error Occurred =====")
         print(f"Error during image processing: {e}")
-        print("=========================\n")
         return f"An error occurred during image processing: {str(e)}"
 
 def format_justification(justification):
+    """
+    Formats the justification to:
+    - Convert **bold text** to <strong> HTML tags
+    - Replace newlines with <br> for proper line breaks
+    - Preserve numbered lists (e.g., "1. First point" → "1. First point")
+    """
     justification = re.sub(r'\*\*(.*?)\*\*', r'<strong>\1</strong>', justification)  # Bold text
     justification = justification.replace("\n", "<br>")  # Line breaks
     justification = re.sub(r'(\d+)\.', r'<br>\1.', justification)  # Preserve numbered lists
@@ -74,7 +67,7 @@ def generate_summary(text):
         return "Error: Ang input na teksto ay dapat magkaroon ng hindi bababa sa 20 salita."
     try:
         response = client.chat.completions.create(
-            model="gpt-4o-mini",
+            model="gpt-4o",
             messages=[{"role": "user", "content": f"Summarize this text in Filipino:\n\n{text}"}]
         )
         if not response.choices:
@@ -83,18 +76,25 @@ def generate_summary(text):
     except Exception as e:
         return f"An error occurred during summarization: {str(e)}"
     
-def retry_request(func, max_retries=3):
-    """Retries an API request with exponential backoff in case of 429 Too Many Requests."""
+async def retry_request(func, max_retries=3):
+    """Retries an API request with exponential backoff in case of 429 Too Many Requests or 402 Payment Required."""
     for i in range(max_retries):
         try:
-            return func()
-        except ClientResponseError as e:  # Directly use the imported exception
+            if asyncio.iscoroutinefunction(func):
+                return await func()  # Await if func is async
+            else:
+                return func()  # Call normally if sync
+        except ClientResponseError as e:  
             if e.status == 429:  # Handle rate limit
                 wait_time = (2 ** i) + random.uniform(0, 1)  # Exponential backoff
                 print(f"Rate limit hit, retrying in {wait_time:.2f} seconds...")
                 time.sleep(wait_time)
             else:
-                raise e  # Raise error if it's not a 429
+                raise e  # Raise other errors
+        except ResponseStatusError as e:  
+            print(f"g4f API error ({e}), retrying...")
+            time.sleep(2 ** i)
+    
     raise Exception("Max retries reached")
 
 def grade_essay(essay_text, context_text):
@@ -117,64 +117,45 @@ def grade_essay(essay_text, context_text):
     justification_pattern = re.compile(r"Justification:\s*(.*)", re.DOTALL)
 
     for criterion in criteria:
-        truncated_essay = essay_text[:1000]  # Limiting to 1000 characters
+        truncated_essay = essay_text[:1000]  
 
-        # Debugging: Log what is being sent to the AI
-        print("\n===== Sending to AI =====")
-        print(f"Criterion: {criterion['name']}")
-        print(f"Points Possible: {criterion['points_possible']}")
-        print(f"Essay (first 1000 chars): {truncated_essay}")
-        print(f"Context: {context_text}")
-        print("=========================\n")
+        response = retry_request(lambda: client.chat.completions.create(
+            model="gpt-4o",
+            messages=[{
+                "role": "user",
+                "content": (
+                    f"Grade the following student work based on the criterion '{criterion['name']}' out of {criterion['points_possible']} points.\n\n"
+                    f"Context from teacher: {context_text}\n\n"
+                    "When grading, consider:\n"
+                    f"1. How well the student addresses the specific requirements of '{criterion['name']}'\n"
+                    "2. Both the strengths and areas for improvement in the student's work\n"
+                    "3. The depth of understanding demonstrated, not just surface-level content\n"
+                    "4. The appropriate use of concepts and terminology related to the topic\n\n"
+                    "ALWAYS respond in Filipino with a fair assessment. Only assign a failing grade if the student work shows no clear connection to the required topic or criterion.\n\n"
+                    f"Essay to grade: {truncated_essay}\n\n"
+                    "Your response should follow this format:\n"
+                    f"Grade: [numeric value]/{criterion['points_possible']}\n"
+                    "Justification: [3-sentence detailed justification including examples]"
+                )
+            }]
+        ))
 
-        try:
-            response = retry_request(lambda: client.chat.completions.create(
-                model="gpt-4o",
-                messages=[{
-                    "role": "user",
-                    "content": (
-                        f"Grade the following student work based on the criterion '{criterion['name']}' out of {criterion['points_possible']} points.\n\n"
-                        f"Context from teacher: {context_text}\n\n"
-                        "When grading, consider:\n"
-                        f"1. How well the student addresses the specific requirements of '{criterion['name']}'\n"
-                        "2. Both the strengths and areas for improvement in the student's work\n"
-                        "3. The depth of understanding demonstrated, not just surface-level content\n"
-                        "4. The appropriate use of concepts and terminology related to the topic\n\n"
-                        "Only respond in Filipino with a fair assessment. Only assign a failing grade if the student work shows no clear connection to the required topic or criterion.\n\n"
-                        f"Essay to grade: {truncated_essay}\n\n"
-                        "Your response should follow this format:\n"
-                        f"Grade: [numeric value]/{criterion['points_possible']}\n"
-                        "Justification: [Filipino 3-sentence detailed justification including examples]"
-                    )
-                }]
-            ))
+        raw_grade = response.choices[0].message.content.strip()
 
-            raw_grade = response.choices[0].message.content.strip()
+        grade_match = grade_pattern.search(raw_grade)
+        points_received = float(grade_match.group(1)) if grade_match else 0
 
-            # Debugging: Log AI Response
-            print("\n===== AI Response =====")
-            print(raw_grade)
-            print("=======================\n")
+        justification_match = justification_pattern.search(raw_grade)
+        justification = justification_match.group(1) if justification_match else "No justification provided."
 
-            grade_match = grade_pattern.search(raw_grade)
-            points_received = float(grade_match.group(1)) if grade_match else 0
-
-            justification_match = justification_pattern.search(raw_grade)
-            justification = justification_match.group(1) if justification_match else "No justification provided."
-
-            total_points_received += points_received
-            grades_per_criterion.append(
-                f"Criterion: {criterion['name']} - Grade: {points_received}/{criterion['points_possible']} - Justification: {justification}"
-            )
-
-        except Exception as e:
-            print(f"Error during AI grading: {e}")
-            return f"An error occurred while grading: {str(e)}"
+        total_points_received += points_received
+        grades_per_criterion.append(f"Criterion: {criterion['name']} - Grade: {points_received}/{criterion['points_possible']} - Justification: {justification}")
 
     final_grade = f"{total_points_received}/{total_points_possible}"
     result_summary = "\n".join(grades_per_criterion)
 
     return f"Final Grade: {final_grade}\n\n{result_summary}"
+
 @app.route('/')
 def home():
     return redirect(url_for('front_page'))
