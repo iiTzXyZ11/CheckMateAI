@@ -15,8 +15,8 @@ app.secret_key = os.urandom(24)
 app.config['SESSION_TYPE'] = 'filesystem'
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=30)
 
-client = g4f.Client()
-image_to_text_client = g4f.Client(provider=g4f.Provider.Blackbox) 
+client = g4f.Client(provider=g4f.Provider.GeminiPro, api_key="AIzaSyCW-ermHr52d8NZKyAXbOFRh18ezFWAJOo")
+image_to_text_client = g4f.Client(provider=g4f.Provider.GeminiPro, api_key="AIzaSyCW-ermHr52d8NZKyAXbOFRh18ezFWAJOo") 
 
 
 def image_to_text(image_file):
@@ -70,11 +70,11 @@ def format_justification(justification):
 
 def generate_summary(text):
     if len(text.split()) < 20:
-        return "Error: Ang input na teksto ay dapat magkaroon ng hindi bababa sa 20 salita."
+        return "Error: The text inputted must not have lesser than 20 words."
     try:
         response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[{"role": "user", "content": f"Summarize this text in Filipino:\n\n{text}"}]
+            model="gemini-2.5-flash",
+            messages=[{"role": "user", "content": f"Summarize this text:\n\n{text}"}]
         )
         if not response.choices:
             return "No summary could be generated."
@@ -128,7 +128,7 @@ def grade_essay(essay_text, context_text):
 
         try:
             response = retry_request(lambda: client.chat.completions.create(
-                model="gpt-4o",
+                model="gemini-2.5-flash",
                 messages=[{
                     "role": "user",
                     "content": (
@@ -139,11 +139,11 @@ def grade_essay(essay_text, context_text):
                         "2. Both the strengths and areas for improvement in the student's work\n"
                         "3. The depth of understanding demonstrated, not just surface-level content\n"
                         "4. The appropriate use of concepts and terminology related to the topic\n\n"
-                        "Only respond in Filipino with a fair assessment. Only assign a failing grade if the student work shows no clear connection to the required topic or criterion.\n\n"
+                        "be fair with the assessment. Only assign a failing grade if the student work shows no clear connection to the required topic or criterion.\n\n"
                         f"Essay to grade: {truncated_essay}\n\n"
                         "Your response should follow this format:\n"
                         f"Grade: [numeric value]/{criterion['points_possible']}\n"
-                        "Justification: [Filipino 3-sentence detailed justification including examples]"
+                        "Justification: [ 3-sentence detailed justification including examples]"
                     )
                 }]
             ))
