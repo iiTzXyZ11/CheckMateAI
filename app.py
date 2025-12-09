@@ -15,9 +15,8 @@ app.secret_key = os.urandom(24)
 app.config['SESSION_TYPE'] = 'filesystem'
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=30)
 
-client = g4f.Client(provider=g4f.Provider.GeminiPro, api_key="AIzaSyCW-ermHr52d8NZKyAXbOFRh18ezFWAJOo")
-image_to_text_client = g4f.Client(provider=g4f.Provider.GeminiPro, api_key="AIzaSyCW-ermHr52d8NZKyAXbOFRh18ezFWAJOo") 
-
+client = g4f.Client(provider=g4f.Provider.GeminiPro, api_key="Put Your API Key Here")
+image_to_text_client = g4f.Client(provider=g4f.Provider.GeminiPro, api_key="Put Your API Key Here") 
 
 def image_to_text(image_file):
     try:
